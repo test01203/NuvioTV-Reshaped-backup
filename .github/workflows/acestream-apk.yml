@@ -1,0 +1,69 @@
+name: Ace Stream APK
+
+# Builds an installable debug APK of this fork without the upstream's secrets: login and sync
+# services stay unset, and the APK is signed with a key made for the run.
+on:
+  push:
+    branches:
+      - feat/acestream-iptv
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acestream-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Configure build
+        run: |
+          set -e
+          cat > local.properties <<'EOF'
+          TV_LOGIN_WEB_BASE_URL=https://nuvio.tv/tv-login
+          DEVICE_LOGIN_WEB_BASE_URL=https://nuvio.tv/link
+          SIMKL_APP_NAME=nuvio
+          INTRODB_API_URL=https://api.introdb.app/
+          IMDB_RATINGS_API_BASE_URL=https://seriesgraph.com/
+          IMDB_TAPFRAME_API_BASE_URL=https://imdb.tapframe.space/
+          EOF
+          cp local.properties local.dev.properties
+
+          KEYSTORE_PATH="$RUNNER_TEMP/build.jks"
+          keytool -genkeypair -noprompt -keystore "$KEYSTORE_PATH" -storepass buildpass -keypass buildpass \
+            -alias nuviotv -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=NuvioTV RS"
+          {
+            echo "NUVIO_RELEASE_STORE_FILE=$KEYSTORE_PATH"
+            echo "NUVIO_RELEASE_STORE_PASSWORD=buildpass"
+            echo "NUVIO_RELEASE_KEY_ALIAS=nuviotv"
+            echo "NUVIO_RELEASE_KEY_PASSWORD=buildpass"
+          } >> "$GITHUB_ENV"
+
+      - name: Live TV unit tests
+        run: ./gradlew :app:testFullDebugUnitTest --tests 'com.nuvio.tv.reshaped.livetv.*' --stacktrace
+
+      - name: Build APK
+        run: ./gradlew :app:assembleFullDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NuvioTV-RS-AceStream
+          path: app/build/outputs/apk/full/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
