@@ -1,4 +1,4 @@
-package com.nuvio.acetv.ui
+package app.livechannels.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,8 +32,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.acetv.AppModel
-import com.nuvio.acetv.R
+import app.livechannels.AppModel
+import app.livechannels.R
 
 @Composable
 fun SettingsScreen(model: AppModel, onBack: () -> Unit, onEngineChanged: () -> Unit) {

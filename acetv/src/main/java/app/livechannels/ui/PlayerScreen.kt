@@ -1,4 +1,4 @@
-package com.nuvio.acetv.ui
+package app.livechannels.ui
 
 import android.content.Context
 import android.view.KeyEvent
@@ -56,12 +56,12 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.nuvio.acetv.AceException
-import com.nuvio.acetv.AppModel
-import com.nuvio.acetv.Channel
-import com.nuvio.acetv.Engine
-import com.nuvio.acetv.R
-import com.nuvio.acetv.Sessions
+import app.livechannels.AceException
+import app.livechannels.AppModel
+import app.livechannels.Channel
+import app.livechannels.Engine
+import app.livechannels.R
+import app.livechannels.Sessions
 import kotlin.coroutines.resume
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation

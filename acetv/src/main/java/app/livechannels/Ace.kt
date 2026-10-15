@@ -1,4 +1,4 @@
-package com.nuvio.acetv
+package app.livechannels
 
 import android.content.ComponentName
 import android.content.Context
@@ -27,7 +27,7 @@ import org.acestream.engine.service.v0.IStartEngineResponse
 import org.json.JSONArray
 import org.json.JSONObject
 
-private const val TAG = "NuvioLive"
+private const val TAG = "LiveChannels"
 
 const val DEFAULT_ENGINE = "http://127.0.0.1:6878"
 
@@ -399,7 +399,7 @@ object Sessions {
 // region Preferences
 
 class Prefs(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences("nuvio_live", Context.MODE_PRIVATE)
+    private val prefs = context.applicationContext.getSharedPreferences("live_channels", Context.MODE_PRIVATE)
 
     var engineUrl: String
         get() = prefs.getString("engine", null)?.takeIf { it.isNotBlank() } ?: DEFAULT_ENGINE

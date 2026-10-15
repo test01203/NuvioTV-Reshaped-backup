@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Nuvio Live</string>
+    <string name="app_name">Live Channels</string>
     <string name="all_channels">All channels</string>
     <string name="favorites">Favorites</string>
     <string name="uncategorized">Other</string>

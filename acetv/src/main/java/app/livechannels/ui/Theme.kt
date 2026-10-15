@@ -1,4 +1,4 @@
-package com.nuvio.acetv.ui
+package app.livechannels.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -27,10 +27,10 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Typography
 import androidx.tv.material3.darkColorScheme
-import com.nuvio.acetv.Health
-import com.nuvio.acetv.R
+import app.livechannels.Health
+import app.livechannels.R
 
-/** Nuvio's dark palette. */
+/** A dark palette. */
 object Palette {
     val Background = Color(0xFF0C0D0F)
     val Elevated = Color(0xFF17191D)
@@ -79,7 +79,7 @@ fun AppTheme(content: @Composable () -> Unit) {
     }
 }
 
-/** A focusable row or button in Nuvio's style: dim at rest, white with dark text when focused. */
+/** A focusable row or button in a TV style: dim at rest, white with dark text when focused. */
 @Composable
 fun FocusCard(
     onClick: () -> Unit,

@@ -1,4 +1,4 @@
-package com.nuvio.acetv.ui
+package app.livechannels.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -41,12 +41,12 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
-import com.nuvio.acetv.AceException
-import com.nuvio.acetv.AppModel
-import com.nuvio.acetv.Channel
-import com.nuvio.acetv.Engine
-import com.nuvio.acetv.LoadState
-import com.nuvio.acetv.R
+import app.livechannels.AceException
+import app.livechannels.AppModel
+import app.livechannels.Channel
+import app.livechannels.Engine
+import app.livechannels.LoadState
+import app.livechannels.R
 import kotlinx.coroutines.delay
 
 private const val ALL = ""

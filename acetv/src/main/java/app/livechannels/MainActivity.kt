@@ -1,4 +1,4 @@
-package com.nuvio.acetv
+package app.livechannels
 
 import android.content.Context
 import android.os.Bundle
@@ -14,10 +14,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import com.nuvio.acetv.ui.AppTheme
-import com.nuvio.acetv.ui.ChannelsScreen
-import com.nuvio.acetv.ui.PlayerScreen
-import com.nuvio.acetv.ui.SettingsScreen
+import app.livechannels.ui.AppTheme
+import app.livechannels.ui.ChannelsScreen
+import app.livechannels.ui.PlayerScreen
+import app.livechannels.ui.SettingsScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 

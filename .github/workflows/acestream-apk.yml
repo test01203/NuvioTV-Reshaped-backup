@@ -8,7 +8,7 @@ on:
       - feat/acestream-iptv
     paths-ignore:
       - "acetv/**"
-      - ".github/workflows/nuvio-live-apk.yml"
+      - ".github/workflows/live-channels-apk.yml"
   workflow_dispatch:
 
 permissions:

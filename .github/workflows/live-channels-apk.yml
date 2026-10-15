@@ -1,4 +1,4 @@
-name: Nuvio Live APK
+name: Live Channels APK
 
 # The separate Ace Stream channels app (module :acetv), built and published on its own release.
 on:
@@ -9,14 +9,14 @@ on:
       - "acetv/**"
       - "gradle/**"
       - "settings.gradle.kts"
-      - ".github/workflows/nuvio-live-apk.yml"
+      - ".github/workflows/live-channels-apk.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: nuvio-live-apk-${{ github.ref }}
+  group: live-channels-apk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -41,12 +41,12 @@ jobs:
           touch local.properties local.dev.properties
           KEYSTORE_PATH="$RUNNER_TEMP/live.jks"
           keytool -genkeypair -noprompt -keystore "$KEYSTORE_PATH" -storepass buildpass -keypass buildpass \
-            -alias live -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Nuvio Live"
+            -alias live -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Live Channels"
           {
-            echo "NUVIO_RELEASE_STORE_FILE=$KEYSTORE_PATH"
-            echo "NUVIO_RELEASE_STORE_PASSWORD=buildpass"
-            echo "NUVIO_RELEASE_KEY_ALIAS=live"
-            echo "NUVIO_RELEASE_KEY_PASSWORD=buildpass"
+            echo "LIVE_SIGNING_STORE_FILE=$KEYSTORE_PATH"
+            echo "LIVE_SIGNING_STORE_PASSWORD=buildpass"
+            echo "LIVE_SIGNING_KEY_ALIAS=live"
+            echo "LIVE_SIGNING_KEY_PASSWORD=buildpass"
           } >> "$GITHUB_ENV"
 
       - name: Build APK
@@ -58,9 +58,9 @@ jobs:
         run: |
           set -e
           mkdir -p dist
-          cp "$(ls acetv/build/outputs/apk/release/*.apk | head -1)" dist/NuvioLive.apk
-          TAG=nuvio-live-latest
+          cp "$(ls acetv/build/outputs/apk/release/*.apk | head -1)" dist/LiveChannels.apk
+          TAG=live-channels-latest
           gh release delete "$TAG" --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
-          gh release create "$TAG" dist/NuvioLive.apk -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
-            --title "Nuvio Live (latest build)" \
+          gh release create "$TAG" dist/LiveChannels.apk -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Live Channels (latest build)" \
             --notes "Ace Stream channels only. Build of ${GITHUB_SHA::7}. Needs Ace Stream Engine installed on the device."
