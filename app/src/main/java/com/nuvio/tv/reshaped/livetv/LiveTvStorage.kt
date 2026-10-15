@@ -29,11 +29,31 @@ internal class LiveTvStorage(context: Context, private val profileId: Int) {
 
     /** The saved sources, in the order they were added. A single source saved by an older version is moved over. */
     fun sources(): List<LiveTvSource> {
-        val saved = string(SOURCES) ?: return migrateLegacySource()
-        return runCatching {
+        val saved = string(SOURCES)
+        val sources = if (saved == null) migrateLegacySource() else runCatching {
             val array = JSONArray(saved)
             (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.toSource() }
         }.getOrDefault(emptyList())
+        return withBuiltInAceStream(sources)
+    }
+
+    /**
+     * Every profile starts with the Ace Stream catalogue (all channels search-ace.stream lists) as
+     * a built-in source. It is added once: a viewer who removes it does not get it back.
+     */
+    private fun withBuiltInAceStream(sources: List<LiveTvSource>): List<LiveTvSource> {
+        if (prefs.getBoolean(key(ACE_BUILT_IN_ADDED), false)) return sources
+        val result = if (sources.any { it.type == LiveTvSourceType.AceStream }) sources else {
+            sources + LiveTvSource(
+                id = ACE_BUILT_IN_SOURCE_ID,
+                type = LiveTvSourceType.AceStream,
+                url = ACE_STREAM_DEFAULT_ENGINE,
+                aceStream = LiveTvAceStreamSettings(),
+            )
+        }
+        saveSources(result)
+        prefs.edit().putBoolean(key(ACE_BUILT_IN_ADDED), true).apply()
+        return result
     }
 
     fun saveSources(sources: List<LiveTvSource>) {
@@ -252,6 +272,8 @@ internal class LiveTvStorage(context: Context, private val profileId: Int) {
     companion object {
         const val PREFS = "nuvio_live_tv"
         private const val SOURCES = "sources"
+        private const val ACE_BUILT_IN_ADDED = "ace_stream_built_in_added"
+        const val ACE_BUILT_IN_SOURCE_ID = "acestream"
         private const val HIDDEN_GROUPS = "hidden_groups"
         private const val GROUP_ORDER = "group_order"
         private const val GROUP_NAMES = "group_names"
