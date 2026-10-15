@@ -34,7 +34,25 @@ internal class LiveTvStorage(context: Context, private val profileId: Int) {
             val array = JSONArray(saved)
             (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.toSource() }
         }.getOrDefault(emptyList())
-        return withBuiltInAceStream(sources)
+        return withBuiltInFreeChannels(withBuiltInAceStream(sources))
+    }
+
+    /**
+     * Every profile also starts with iptv-org's public list of free-to-air channels, grouped by
+     * country, with Israel's first. Added once, like the Ace Stream source: removing it is final.
+     */
+    private fun withBuiltInFreeChannels(sources: List<LiveTvSource>): List<LiveTvSource> {
+        if (prefs.getBoolean(key(FREE_BUILT_IN_ADDED), false)) return sources
+        val url = FREE_CHANNELS_PLAYLIST
+        val result = if (sources.any { it.type == LiveTvSourceType.M3u && it.url.equals(url, ignoreCase = true) }) {
+            sources
+        } else {
+            listOf(LiveTvSource(id = FREE_BUILT_IN_SOURCE_ID, type = LiveTvSourceType.M3u, url = url)) + sources
+        }
+        saveSources(result)
+        if (groupOrder().isEmpty()) saveGroupOrder(listOf(FREE_CHANNELS_FIRST_GROUP))
+        prefs.edit().putBoolean(key(FREE_BUILT_IN_ADDED), true).apply()
+        return result
     }
 
     /**
@@ -273,6 +291,11 @@ internal class LiveTvStorage(context: Context, private val profileId: Int) {
         const val PREFS = "nuvio_live_tv"
         private const val SOURCES = "sources"
         private const val ACE_BUILT_IN_ADDED = "ace_stream_built_in_added"
+        private const val FREE_BUILT_IN_ADDED = "free_channels_built_in_added"
+        const val FREE_BUILT_IN_SOURCE_ID = "iptvorg"
+        /** iptv-org's public channels, one category per country (https://github.com/iptv-org/iptv). */
+        const val FREE_CHANNELS_PLAYLIST = "https://iptv-org.github.io/iptv/index.country.m3u"
+        const val FREE_CHANNELS_FIRST_GROUP = "Israel"
         const val ACE_BUILT_IN_SOURCE_ID = "acestream"
         private const val HIDDEN_GROUPS = "hidden_groups"
         private const val GROUP_ORDER = "group_order"
