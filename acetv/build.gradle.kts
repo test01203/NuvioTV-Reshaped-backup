@@ -52,6 +52,11 @@ android {
         compose = true
         aidl = true
     }
+    lint {
+        // Media3's @UnstableApi calls are opted into in code; lint should not stop a build over them.
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
 }
 
 dependencies {

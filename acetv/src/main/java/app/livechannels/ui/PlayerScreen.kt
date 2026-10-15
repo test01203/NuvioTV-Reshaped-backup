@@ -33,7 +33,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -119,6 +118,7 @@ private suspend fun ExoPlayer.awaitPlaying(): Boolean = withTimeoutOrNull(PLAYER
     }
 } ?: false
 
+@OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: () -> Unit) {
     val context = LocalContext.current
