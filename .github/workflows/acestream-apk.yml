@@ -6,6 +6,9 @@ on:
   push:
     branches:
       - feat/acestream-iptv
+    paths-ignore:
+      - "acetv/**"
+      - ".github/workflows/nuvio-live-apk.yml"
   workflow_dispatch:
 
 permissions:

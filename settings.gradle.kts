@@ -25,5 +25,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "My Application"
 include(":app")
+include(":acetv")
 include(":baselineprofile")
 include(":ffmpeg-decoder-downmix")

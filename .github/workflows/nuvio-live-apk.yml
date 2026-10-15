@@ -1,0 +1,66 @@
+name: Nuvio Live APK
+
+# The separate Ace Stream channels app (module :acetv), built and published on its own release.
+on:
+  push:
+    branches:
+      - feat/acestream-iptv
+    paths:
+      - "acetv/**"
+      - "gradle/**"
+      - "settings.gradle.kts"
+      - ".github/workflows/nuvio-live-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nuvio-live-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Signing key for the run
+        run: |
+          set -e
+          touch local.properties local.dev.properties
+          KEYSTORE_PATH="$RUNNER_TEMP/live.jks"
+          keytool -genkeypair -noprompt -keystore "$KEYSTORE_PATH" -storepass buildpass -keypass buildpass \
+            -alias live -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Nuvio Live"
+          {
+            echo "NUVIO_RELEASE_STORE_FILE=$KEYSTORE_PATH"
+            echo "NUVIO_RELEASE_STORE_PASSWORD=buildpass"
+            echo "NUVIO_RELEASE_KEY_ALIAS=live"
+            echo "NUVIO_RELEASE_KEY_PASSWORD=buildpass"
+          } >> "$GITHUB_ENV"
+
+      - name: Build APK
+        run: ./gradlew :acetv:assembleRelease --stacktrace
+
+      - name: Publish APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p dist
+          cp "$(ls acetv/build/outputs/apk/release/*.apk | head -1)" dist/NuvioLive.apk
+          TAG=nuvio-live-latest
+          gh release delete "$TAG" --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+          gh release create "$TAG" dist/NuvioLive.apk -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Nuvio Live (latest build)" \
+            --notes "Ace Stream channels only. Build of ${GITHUB_SHA::7}. Needs Ace Stream Engine installed on the device."
