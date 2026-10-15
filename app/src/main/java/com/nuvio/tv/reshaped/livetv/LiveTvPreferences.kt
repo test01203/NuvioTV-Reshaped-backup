@@ -27,10 +27,11 @@ object LiveTvPreferences {
     /** Whether the preview plays the channel's sound. */
     val previewSound: StateFlow<Boolean> = _previewSound.asStateFlow()
 
-    private val _acePlayer = MutableStateFlow(true)
+    private val _acePlayer = MutableStateFlow(false)
     /**
-     * Ace Stream channels open in Ace Stream's own player (free), not Nuvio's: on Android the
-     * engine stops other players after 5 minutes unless the viewer bought its "Proxy Server" option.
+     * Ace Stream channels open in Ace Stream's own player (free) instead of Nuvio's. Off by
+     * default; on Android the engine may stop other players after 5 minutes unless the viewer
+     * has its "Proxy Server" option, which is what this is for.
      */
     val acePlayer: StateFlow<Boolean> = _acePlayer.asStateFlow()
 
@@ -45,7 +46,7 @@ object LiveTvPreferences {
             _enabled.value = prefs.getBoolean(KEY_ENABLED, false)
             _previews.value = prefs.getBoolean(KEY_PREVIEWS, true)
             _previewSound.value = prefs.getBoolean(KEY_PREVIEW_SOUND, true)
-            _acePlayer.value = prefs.getBoolean(KEY_ACE_PLAYER, true)
+            _acePlayer.value = prefs.getBoolean(KEY_ACE_PLAYER, false)
             loaded = true
         }
     }
