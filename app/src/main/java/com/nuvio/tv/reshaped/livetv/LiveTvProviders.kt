@@ -455,6 +455,8 @@ enum class LiveTvError {
     XtreamRequired, XtreamInvalidUrl, XtreamNoChannels, XtreamFailed,
     /** The Ace Stream engine did not answer: not installed, not running, or a wrong address. */
     AceStreamEngine, AceStreamInvalidUrl, AceStreamNoChannels, AceStreamFailed,
+    /** No Ace Stream app is installed, so there is no engine to start. */
+    AceStreamNotInstalled,
 }
 
 internal class LiveTvException(val error: LiveTvError) : Exception(error.name)

@@ -8,6 +8,14 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
+        <!-- Ace Stream apps, whose engine Live TV starts for Ace Stream channels. -->
+        <intent>
+            <action android:name="org.acestream.engine.service.v0.IAceStreamEngine" />
+        </intent>
+        <package android:name="org.acestream.media" />
+        <package android:name="org.acestream.media.atv" />
+        <package android:name="org.acestream.core" />
+        <package android:name="org.acestream.core.atv" />
     </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />

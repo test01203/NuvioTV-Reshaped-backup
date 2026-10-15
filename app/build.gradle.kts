@@ -302,6 +302,8 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        // Ace Stream's engine service interface (src/main/aidl/org/acestream).
+        aidl = true
     }
 
     sourceSets {

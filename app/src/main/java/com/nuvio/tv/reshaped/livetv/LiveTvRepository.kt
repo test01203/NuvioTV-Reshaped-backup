@@ -42,6 +42,7 @@ object LiveTvRepository {
     private const val EPG_TICK_MS = 60_000L
     /** How long a downloaded guide is used before it is downloaded again. */
     private const val EPG_DOWNLOAD_MS = 10L * 60 * 60 * 1000
+    private const val ACE_GUIDE_MAX_AGE_MS = 20L * 60 * 1000
     /** The saved guide is read again when channels run out of kept programmes, at most this often. */
     private const val EPG_MIN_READ_GAP_MS = 60L * 60 * 1000
     /** A guide that could not be read is tried again sooner. */
@@ -395,6 +396,13 @@ object LiveTvRepository {
 
     /** The channel with a link that plays now: Stalker links are created per play; others are as listed. */
     suspend fun playableChannel(channel: LiveTvChannel): LiveTvChannel {
+        // Ace Stream channels need the engine running; it may have been stopped since the list loaded.
+        channel.aceEngineUrl()?.let { engine ->
+            runCatching { LiveTvAceEngine.ensureRunning(appContext, engine) }
+                .onFailure { if (it is CancellationException) throw it else Log.w(TAG, "Ace Stream engine not started", it) }
+            // A session of its own, whose statistics the player's loading meter shows.
+            return channel.copy(streamUrl = LiveTvAceStream.startSession(listOf(channel.streamUrl) + channel.alternateUrls))
+        }
         val source = _uiState.value.sources.firstOrNull { it.id == channel.sourceId }
         if (source?.type != LiveTvSourceType.Stalker || channel.stalkerCommand == null) return channel
         return try {
@@ -571,6 +579,10 @@ object LiveTvRepository {
                 if (playlist.channels.isEmpty()) {
                     throw LiveTvException(if (file != null) LiveTvError.FileNoChannels else LiveTvError.NoChannels)
                 }
+                if (playlist.channels.any { it.streamUrl.startsWith("$ACE_STREAM_DEFAULT_ENGINE/ace/") }) {
+                    runCatching { LiveTvAceEngine.ensureRunning(appContext, ACE_STREAM_DEFAULT_ENGINE) }
+                        .onFailure { if (it is CancellationException) throw it }
+                }
                 playlist.channels to playlist.epgUrls
             }
             LiveTvSourceType.Xtream -> {
@@ -587,10 +599,11 @@ object LiveTvRepository {
                 channels to emptyList()
             }
             LiveTvSourceType.AceStream -> {
+                // Starts the installed Ace Stream engine when it is not running yet.
+                LiveTvAceEngine.ensureRunning(appContext, source.aceStream.engineUrl)
                 val channels = LiveTvAceStream.channels(source.aceStream)
                 if (channels.isEmpty()) throw LiveTvException(LiveTvError.AceStreamNoChannels)
-                // The search's guide is only the programme on air; the channels' tvg-id matches public guides.
-                channels to emptyList()
+                channels to listOf(LiveTvAceStream.guideUrl(source.aceStream))
             }
         }
         // Ids only need to be unique within a source; the list keys on them across all of them.
@@ -869,9 +882,16 @@ object LiveTvRepository {
     ): LiveTvGuide? {
         try {
             val saved = withContext(Dispatchers.IO) { file.lastModified() }
-            if (force || saved == 0L || nowMs - saved !in 0 until EPG_DOWNLOAD_MS) {
+            val aceGuide = LiveTvAceStream.isGuideUrl(url)
+            // The engine knows only the next few programmes: its guide is read again more often.
+            val maxAge = if (aceGuide) ACE_GUIDE_MAX_AGE_MS else EPG_DOWNLOAD_MS
+            if (force || saved == 0L || nowMs - saved !in 0 until maxAge) {
                 try {
-                    LiveTvHttp.download(url, LIVE_TV_STREAM_HEADERS, file, LiveTvHttp.GUIDE_READ_TIMEOUT_S)
+                    if (aceGuide) {
+                        LiveTvAceStream.writeGuide(url, file)
+                    } else {
+                        LiveTvHttp.download(url, LIVE_TV_STREAM_HEADERS, file, LiveTvHttp.GUIDE_READ_TIMEOUT_S)
+                    }
                 } catch (cancel: CancellationException) {
                     throw cancel
                 } catch (error: Exception) {

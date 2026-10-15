@@ -416,6 +416,7 @@ private fun BoxScope.LiveTvPlayerOverlayContent(state: LiveTvPlayerState, uiStat
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     LiveTvFrameRateMatch(state, uiState)
+    LiveTvAceLoadingMeter(uiState)
     val liveState by LiveTvRepository.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(liveState.isLoaded, liveState.isLoading, liveState.hasSource) {
         if (!liveState.isLoaded && !liveState.isLoading && !liveState.hasSource) LiveTvRepository.reloadIfReleased()

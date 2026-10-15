@@ -127,5 +127,6 @@ internal fun LiveTvError.message(context: Context): String = context.getString(
         LiveTvError.AceStreamInvalidUrl -> R.string.live_tv_error_ace_invalid_url
         LiveTvError.AceStreamNoChannels -> R.string.live_tv_error_ace_no_channels
         LiveTvError.AceStreamFailed -> R.string.live_tv_error_ace_failed
+        LiveTvError.AceStreamNotInstalled -> R.string.live_tv_error_ace_not_installed
     },
 )

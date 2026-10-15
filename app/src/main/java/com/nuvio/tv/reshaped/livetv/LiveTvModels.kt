@@ -20,7 +20,18 @@ data class LiveTvChannel(
     val hideKey: Long = 0L,
     /** What its guide is kept under: see [liveTvGuideKey]. */
     val guideKey: String = "",
+    /** Whether the stream is live right now, where the source says so (Ace Stream does). */
+    val health: LiveTvChannelHealth = LiveTvChannelHealth.Unknown,
+    /** Ace Stream: the channel's other streams, best first, tried when [streamUrl] finds no peers. */
+    val alternateUrls: List<String> = emptyList(),
+    /** Ace Stream: how many streams the catalogue has for the channel (0 when unknown). */
+    val streamCount: Int = 0,
+    /** Ace Stream: how well the best stream is seeded, 0..1; negative when unknown. */
+    val availability: Float = -1f,
 )
+
+/** A channel's stream state as its source last reported it; the list shows a dot for it. */
+enum class LiveTvChannelHealth { Unknown, Active, Weak, Offline }
 
 /** The category key of channels the playlist gives no category; the screens call it "Uncategorised". */
 const val LIVE_TV_UNGROUPED = ""

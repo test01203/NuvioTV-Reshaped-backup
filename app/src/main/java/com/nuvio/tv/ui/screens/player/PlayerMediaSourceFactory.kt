@@ -48,6 +48,7 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
     private var customExtractorsFactory: ExtractorsFactory? = null
     private var customSubtitleParserFactory: SubtitleParser.Factory? = null
     private val loadErrorHandlingPolicy = PlayerLoadErrorHandlingPolicy()
+    private val aceStreamLoadErrorHandlingPolicy = AceStreamLoadErrorHandlingPolicy()
 
     @Volatile private var currentVodCacheUrl: String? = null
     @Volatile private var currentVodCacheResolvedUrl: String? = null
@@ -197,8 +198,11 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         } else {
             progressiveFactory
         }
+        // Nuvio RS hook: the Ace Stream engine answers 5xx while it still buffers a channel; keep asking.
+        val errorPolicy: LoadErrorHandlingPolicy =
+            if (isAceStreamEngineUrl(url)) aceStreamLoadErrorHandlingPolicy else loadErrorHandlingPolicy
         val defaultFactory = DefaultMediaSourceFactory(defaultSourceFactory, extractorsFactory).apply {
-            setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+            setLoadErrorHandlingPolicy(errorPolicy)
             customSubtitleParserFactory?.let { parserFactory ->
                 setSubtitleParserFactory(parserFactory)
             }
@@ -216,10 +220,10 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
         val mediaSource = when {
             isHls && !forceDefaultFactory -> HlsMediaSource.Factory(httpDataSourceFactory)
                 .setAllowChunklessPreparation(true)
-                .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+                .setLoadErrorHandlingPolicy(errorPolicy)
                 .createMediaSource(mediaItem)
             isDash && !forceDefaultFactory -> DashMediaSource.Factory(httpDataSourceFactory)
-                .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+                .setLoadErrorHandlingPolicy(errorPolicy)
                 .createMediaSource(mediaItem)
             else -> defaultFactory.createMediaSource(mediaItem)
         }
@@ -806,6 +810,26 @@ private class PlayerLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy(6) 
             }
         } else super.getRetryDelayMsFor(loadErrorInfo)
     }
+}
+
+/** A link served by an Ace Stream engine on this device (`http://127.0.0.1:6878/ace/...`). */
+internal fun isAceStreamEngineUrl(url: String): Boolean {
+    val lower = url.lowercase()
+    return "/ace/" in lower && (lower.startsWith("http://127.0.0.1") || lower.startsWith("http://localhost"))
+}
+
+/**
+ * Nuvio RS: the Ace Stream engine answers 500 (and sometimes 404) while a channel is still
+ * finding peers and buffering, then serves it. Retried steadily for about 45 seconds instead of
+ * failing on the first answer.
+ */
+private class AceStreamLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy(30) {
+    override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long =
+        if (loadErrorInfo.exception is androidx.media3.common.ParserException) {
+            C.TIME_UNSET
+        } else {
+            1500L
+        }
 }
 
 internal fun shouldPreferAlternativeHlsTrack(

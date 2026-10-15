@@ -40,6 +40,8 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -69,6 +71,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
 import com.nuvio.tv.reshaped.livetv.LiveTvChannel
+import com.nuvio.tv.reshaped.livetv.LiveTvChannelHealth
 import com.nuvio.tv.reshaped.livetv.LiveTvPreferences
 import com.nuvio.tv.reshaped.livetv.LiveTvProgramme
 import com.nuvio.tv.reshaped.livetv.LiveTvRecentChannel
@@ -326,6 +329,8 @@ fun LiveTvScreen(
             .fillMaxSize()
             .background(NuvioTheme.colors.Background),
     ) {
+        // An Ace Stream channel looking for peers before the player opens.
+        LiveTvAceLoadingMeter(uiState = null)
         if (!uiState.isLoaded && !uiState.isLoading && !uiState.hasSource) {
             LiveTvEmptyState(onAddSource = { showSourceDialog = true })
         } else {
@@ -668,6 +673,21 @@ private fun LiveTvChannelRow(
             )
             ProgrammeLine(programme, clock, focused, fallback = groupName ?: channel.group)
         }
+        if (channel.streamCount > 0) {
+            // Ace Stream: how many streams the channel has and how well the best one is seeded.
+            val parts = buildList {
+                add(stringResource(R.string.live_tv_ace_streams, channel.streamCount))
+                if (channel.availability >= 0f) add(stringResource(R.string.live_tv_ace_seeded, (channel.availability * 100).toInt()))
+            }
+            Text(
+                text = parts.joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (focused) Color.Black.copy(alpha = 0.6f) else NuvioTheme.colors.TextTertiary,
+                maxLines = 1,
+                modifier = Modifier.padding(start = NuvioTheme.spacing.sm),
+            )
+        }
+        LiveTvHealthDot(channel.health, Modifier.padding(start = NuvioTheme.spacing.sm))
         if (isFavorite) {
             Icon(
                 imageVector = Icons.Filled.Star,
@@ -677,6 +697,31 @@ private fun LiveTvChannelRow(
             )
         }
     }
+}
+
+/** Green: on air and well seeded; amber: on air but few peers; grey: off air. Nothing when the source does not say. */
+@Composable
+internal fun LiveTvHealthDot(health: LiveTvChannelHealth, modifier: Modifier = Modifier) {
+    val color = when (health) {
+        LiveTvChannelHealth.Unknown -> return
+        LiveTvChannelHealth.Active -> Color(0xFF34C759)
+        LiveTvChannelHealth.Weak -> Color(0xFFFFB020)
+        LiveTvChannelHealth.Offline -> Color(0xFF8E8E93)
+    }
+    val label = stringResource(
+        when (health) {
+            LiveTvChannelHealth.Active -> R.string.live_tv_health_active
+            LiveTvChannelHealth.Weak -> R.string.live_tv_health_weak
+            else -> R.string.live_tv_health_offline
+        },
+    )
+    Box(
+        modifier = modifier
+            .size(10.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(color)
+            .semantics { contentDescription = label },
+    )
 }
 
 /** What is on now, a thin progress bar and the time left, or the category when there is no guide. */

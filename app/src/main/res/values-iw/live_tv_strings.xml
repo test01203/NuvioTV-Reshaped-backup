@@ -10,4 +10,14 @@
     <string name="live_tv_error_ace_invalid_url">הזינו כתובת HTTP תקינה למנוע, למשל http://127.0.0.1:6878.</string>
     <string name="live_tv_error_ace_no_channels">לא נמצאו ערוצים של Ace Stream לחיפוש הזה.</string>
     <string name="live_tv_error_ace_failed">לא ניתן לטעון את ערוצי Ace Stream.</string>
+    <string name="live_tv_error_ace_not_installed">כדי לצפות בערוצי Ace Stream צריך להתקין את Ace Stream Engine (או Ace Stream Media) מחנות Play. אחרי ההתקנה Nuvio מפעיל אותו לבד.</string>
+    <string name="live_tv_health_active">משדר</string>
+    <string name="live_tv_health_weak">משדר, מעט משתתפים</string>
+    <string name="live_tv_health_offline">לא משדר</string>
+    <string name="live_tv_ace_loading_connecting">מתחבר למשתתפים של Ace Stream…</string>
+    <string name="live_tv_ace_loading_buffering">טוען את הערוץ…</string>
+    <string name="live_tv_ace_loading_starting">מתחיל לנגן…</string>
+    <string name="live_tv_ace_loading_details">%1$d משתתפים · %2$d KB/s</string>
+    <string name="live_tv_ace_streams">%1$d מקורות</string>
+    <string name="live_tv_ace_seeded">%1$d%% זמינות</string>
 </resources>

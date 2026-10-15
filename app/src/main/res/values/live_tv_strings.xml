@@ -109,6 +109,7 @@
     <string name="live_tv_error_ace_invalid_url">Enter a valid HTTP engine address, for example http://127.0.0.1:6878.</string>
     <string name="live_tv_error_ace_no_channels">Ace Stream found no channels for this search.</string>
     <string name="live_tv_error_ace_failed">The Ace Stream channels could not be loaded.</string>
+    <string name="live_tv_error_ace_not_installed">Install Ace Stream Engine (or Ace Stream Media) from the Play Store to watch Ace Stream channels. Nuvio starts it by itself after that.</string>
 
     <!-- Phone setup page -->
     <string name="live_tv_web_title">Live TV on your TV</string>
@@ -122,4 +123,13 @@
     <string name="live_tv_web_too_large">That file is too large.</string>
     <string name="live_tv_web_failed">The TV could not take that. Check the fields.</string>
     <string name="live_tv_web_connection_error">Could not reach the TV. Is it still on the Live TV setup screen?</string>
+    <string name="live_tv_health_active">On air</string>
+    <string name="live_tv_health_weak">On air, few peers</string>
+    <string name="live_tv_health_offline">Off air</string>
+    <string name="live_tv_ace_loading_connecting">Connecting to Ace Stream peers…</string>
+    <string name="live_tv_ace_loading_buffering">Buffering the channel…</string>
+    <string name="live_tv_ace_loading_starting">Starting playback…</string>
+    <string name="live_tv_ace_loading_details">%1$d peers · %2$d KB/s</string>
+    <string name="live_tv_ace_streams">%1$d streams</string>
+    <string name="live_tv_ace_seeded">%1$d%% seeded</string>
 </resources>
