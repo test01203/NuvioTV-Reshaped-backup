@@ -39,7 +39,7 @@ class LiveTvAceStreamTest {
             """.trimIndent().lineSequence(),
         )
         assertEquals(2, playlist.channels.size)
-        assertEquals("$ACE_STREAM_DEFAULT_ENGINE/ace/manifest.m3u8?id=${id.lowercase()}", playlist.channels[0].streamUrl)
+        assertEquals("$ACE_STREAM_DEFAULT_ENGINE/ace/getstream?id=${id.lowercase()}", playlist.channels[0].streamUrl)
         assertEquals("Sport", playlist.channels[0].group)
         assertEquals("https://stream.example/2.m3u8", playlist.channels[1].streamUrl)
     }

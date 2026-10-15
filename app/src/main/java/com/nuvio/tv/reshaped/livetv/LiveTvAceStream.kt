@@ -60,19 +60,24 @@ internal object LiveTvAceStream {
     private const val MAX_PAGES = 50
     /** Other streams of a channel tried, in order, when the best finds no peers. */
     private const val MAX_ALTERNATES = 4
-    /** How long a stream gets to find peers before the next one is tried. */
-    private const val PEER_WAIT_MS = 12_000L
-    /** How long the engine gets to buffer before the player opens the stream anyway. */
-    private const val STREAM_WAIT_MS = 25_000L
+    /** How long a stream gets to start streaming before the next one is tried. */
+    private const val STREAM_WAIT_MS = 35_000L
+    /** A stream still without a single peer after this long is given up for the next one. */
+    private const val NO_PEER_GIVE_UP_MS = 25_000L
+    /** Streams nobody saw alive for this long are left out of the list (as acestream-search does). */
+    private const val STALE_SECONDS = 7L * 24 * 60 * 60
     /** A stream nobody saw alive for this long counts as off air. */
     private const val HEALTH_FRESH_SECONDS = 6L * 60 * 60
 
-    /** The engine link that plays content [id]; HLS, which the engine segments itself. */
+    /**
+     * The engine link that plays content [id]: the engine's direct MPEG-TS stream, as Ace Stream's
+     * own players use. (Its HLS output fails on many channels.)
+     */
     fun contentUrl(engineUrl: String, id: String): String =
-        "${engineUrl.trimEnd('/')}/ace/manifest.m3u8?id=$id"
+        "${engineUrl.trimEnd('/')}/ace/getstream?id=$id"
 
     private fun infohashUrl(engineUrl: String, infohash: String): String =
-        "${engineUrl.trimEnd('/')}/ace/manifest.m3u8?infohash=$infohash"
+        "${engineUrl.trimEnd('/')}/ace/getstream?infohash=$infohash"
 
     /** A pasted Ace Stream link as one channel, played through the engine on this device. */
     fun singleChannel(link: String, engineUrl: String = ACE_STREAM_DEFAULT_ENGINE): LiveTvChannel? {
@@ -94,7 +99,15 @@ internal object LiveTvAceStream {
         forEachResult(settings) { group ->
             group.toChannel(settings, channels.size)?.takeIf { seen.add(it.streamUrl) }?.let(channels::add)
         }
-        return channels
+        // Channels on air first, then the rest; the catalogue's order otherwise (the sort is stable).
+        return channels.sortedBy {
+            when (it.health) {
+                LiveTvChannelHealth.Active -> 0
+                LiveTvChannelHealth.Weak -> 1
+                LiveTvChannelHealth.Unknown -> 2
+                LiveTvChannelHealth.Offline -> 3
+            }
+        }
     }
 
     private suspend fun forEachResult(settings: LiveTvAceStreamSettings, block: (JSONObject) -> Unit) {
@@ -138,9 +151,9 @@ internal object LiveTvAceStream {
     /**
      * Opens a playback session (`format=json`): the engine answers with the link to play, a
      * statistics link the loading meter reads, and a command link. Each of [engineLinks] (the
-     * channel's streams, best first) gets [PEER_WAIT_MS] to find peers; one that finds none is
-     * stopped and the next is tried. When none does, the one that came closest plays anyway, and
-     * when the engine does not do sessions at all, the first link plays as listed.
+     * channel's streams, best first) is given until it streams; one that finds no peer at all is
+     * stopped and the next is tried, the last one plays whatever happens, and when the engine does
+     * not do sessions at all the link plays as listed.
      */
     suspend fun startSession(engineLinks: List<String>): String {
         connectingState.value = true
@@ -153,24 +166,25 @@ internal object LiveTvAceStream {
 
     private suspend fun openBestSession(engineLinks: List<String>): String {
         currentSession = null
-        var fallback: Pair<Session, Int>? = null
         for ((index, link) in engineLinks.withIndex()) {
-            val opened = openSession(link) ?: return if (index == 0) link else (fallback?.first?.playbackUrl ?: engineLinks.first())
-            val (session, commandUrl) = opened
+            val (session, commandUrl) = openSession(link)
+                // An engine without sessions: the listed link plays, and the player waits on it.
+                ?: return if (index == 0) link else engineLinks[index]
             currentSession = session
-            val peers = waitForPeers(session)
-            if (peers > 0) {
-                // Handing the link over before the engine streams gets "500" answers.
-                waitUntilStreaming(session)
-                return session.playbackUrl
+            val last = index == engineLinks.lastIndex
+            when (waitUntilStreaming(session)) {
+                StreamStart.Streaming -> return session.playbackUrl
+                // Peers but still buffering: the player takes over; its retries cover the rest.
+                StreamStart.Buffering -> return session.playbackUrl
+                StreamStart.NoPeers -> if (last) return session.playbackUrl
             }
-            if (index == engineLinks.lastIndex) return session.playbackUrl
             Log.i(TAG, "Stream ${index + 1} of ${engineLinks.size} found no peers; trying the next")
-            if (fallback == null || peers > fallback.second) fallback = session to peers
             commandUrl?.let { stopQuietly(it) }
         }
-        return fallback?.first?.playbackUrl ?: engineLinks.first()
+        return engineLinks.first()
     }
+
+    private enum class StreamStart { Streaming, Buffering, NoPeers }
 
     private suspend fun openSession(link: String): Pair<Session, String?>? {
         val url = link + (if ('?' in link) "&" else "?") + "format=json"
@@ -187,26 +201,21 @@ internal object LiveTvAceStream {
         }
     }
 
-    /** Peers the session found within [PEER_WAIT_MS] (or as soon as it streams). */
-    private suspend fun waitForPeers(session: Session): Int {
-        var peers = 0
-        val deadline = System.currentTimeMillis() + PEER_WAIT_MS
-        while (System.currentTimeMillis() < deadline) {
+    /**
+     * Waits until the engine streams ([STREAM_WAIT_MS] at most). A stream that has not found a
+     * single peer after [NO_PEER_GIVE_UP_MS] is reported as such, so the next one can be tried.
+     */
+    private suspend fun waitUntilStreaming(session: Session): StreamStart {
+        var sawPeers = false
+        while (true) {
+            val elapsed = System.currentTimeMillis() - session.startedAtMs
             val stats = stats(session)
             if (stats != null) {
-                peers = maxOf(peers, stats.peers)
-                if (stats.peers > 0 || stats.status == "dl") return maxOf(peers, 1)
+                if (stats.peers > 0) sawPeers = true
+                if (stats.status == "dl") return StreamStart.Streaming
             }
-            kotlinx.coroutines.delay(1000)
-        }
-        return peers
-    }
-
-    /** Waits (at most [STREAM_WAIT_MS]) until the engine has buffered enough to serve the stream. */
-    private suspend fun waitUntilStreaming(session: Session) {
-        val deadline = System.currentTimeMillis() + STREAM_WAIT_MS
-        while (System.currentTimeMillis() < deadline) {
-            if (stats(session)?.status == "dl") return
+            if (!sawPeers && elapsed >= NO_PEER_GIVE_UP_MS) return StreamStart.NoPeers
+            if (elapsed >= STREAM_WAIT_MS) return if (sawPeers) StreamStart.Buffering else StreamStart.NoPeers
             kotlinx.coroutines.delay(1000)
         }
     }
@@ -350,8 +359,14 @@ internal object LiveTvAceStream {
         val items = optJSONArray("items")?.let { array -> List(array.length()) { array.optJSONObject(it) }.filterNotNull() }
             ?: listOf(this)
         // Best first: on air, most peers, most recently seen alive.
+        val nowSeconds = System.currentTimeMillis() / 1000
         val ranked = items
             .filter { it.optString("infohash").isNotBlank() }
+            // Streams nobody has seen alive for a week are dead links.
+            .filter { item ->
+                val seen = item.optLong("availability_updated_at", 0L)
+                seen <= 0L || nowSeconds - seen < STALE_SECONDS
+            }
             .sortedWith(
                 compareByDescending<JSONObject> { it.optInt("status", 0) == 2 }
                     .thenByDescending { it.optDouble("availability", 0.0) }
