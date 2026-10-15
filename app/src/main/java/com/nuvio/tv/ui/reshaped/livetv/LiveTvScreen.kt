@@ -70,7 +70,9 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
+import com.nuvio.tv.reshaped.livetv.LiveTvAceEngine
 import com.nuvio.tv.reshaped.livetv.LiveTvChannel
+import com.nuvio.tv.reshaped.livetv.aceEngineUrl
 import com.nuvio.tv.reshaped.livetv.LiveTvChannelHealth
 import com.nuvio.tv.reshaped.livetv.LiveTvPreferences
 import com.nuvio.tv.reshaped.livetv.LiveTvProgramme
@@ -291,6 +293,14 @@ fun LiveTvScreen(
                     } else {
                         val list = visibleChannels.takeIf { list -> list.any { it.streamUrl == channel.streamUrl } }.orEmpty()
                         LiveTvRepository.setZapList(list, folderKey = filterKey.takeIf { query.isBlank() })
+                    }
+                    // Ace Stream channels play in Ace Player when so set (see LiveTvPreferences.acePlayer).
+                    if (channel.aceEngineUrl() != null && LiveTvPreferences.acePlayer.value &&
+                        LiveTvAceEngine.openInAcePlayer(context, channel)
+                    ) {
+                        LiveTvRepository.recordRecentChannel(channel)
+                        launching = false
+                        return@launch
                     }
                     val route = liveTvPlayerRoute(channel, viewModel.profileId)
                     viewModel.restoreFocusOnReturn = true

@@ -20,4 +20,6 @@
     <string name="live_tv_ace_loading_details">%1$d משתתפים · %2$d KB/s</string>
     <string name="live_tv_ace_streams">%1$d מקורות</string>
     <string name="live_tv_ace_seeded">%1$d%% זמינות</string>
+    <string name="settings_live_tv_ace_player_title">ערוצי Ace Stream בנגן של Ace</string>
+    <string name="settings_live_tv_ace_player_description">מנגן ערוצי Ace Stream בנגן של Ace Stream עצמו, שהוא חינמי. בנגן של Nuvio המנוע עוצר את הצפייה אחרי 5 דקות, אלא אם קניתם את האפשרות \"Proxy Server\" של Ace Stream.</string>
 </resources>

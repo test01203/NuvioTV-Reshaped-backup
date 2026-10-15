@@ -132,4 +132,6 @@
     <string name="live_tv_ace_loading_details">%1$d peers · %2$d KB/s</string>
     <string name="live_tv_ace_streams">%1$d streams</string>
     <string name="live_tv_ace_seeded">%1$d%% seeded</string>
+    <string name="settings_live_tv_ace_player_title">Ace Stream channels in Ace Player</string>
+    <string name="settings_live_tv_ace_player_description">Plays Ace Stream channels in Ace Stream\'s own player, which is free. Nuvio\'s player needs the paid Ace Stream \"Proxy Server\" option, or the engine stops it after 5 minutes.</string>
 </resources>

@@ -123,6 +123,52 @@ internal object LiveTvAceEngine {
         return ready.await()
     }
 
+    /**
+     * Plays [channel] in Ace Stream's own player (Ace Player), the way Ace Stream asks other apps
+     * to start its content: free for the viewer, unlike external players. A channel listed by
+     * content id starts with `org.acestream.action.start_content`; one listed by infohash gets an
+     * engine session whose playback link opens in the Ace Stream app, which the engine counts as
+     * its own player. False when no Ace Stream app could take it.
+     */
+    suspend fun openInAcePlayer(context: Context, channel: LiveTvChannel): Boolean {
+        val pkg = servicePackage(context) ?: return false
+        val link = channel.streamUrl
+        val contentId = Regex("""[?&]id=([0-9a-fA-F]{40})""").find(link)?.groupValues?.get(1)
+        val infohash = Regex("""[?&]infohash=([0-9a-fA-F]{40})""").find(link)?.groupValues?.get(1)
+        val intents = buildList {
+            if (contentId != null) add(startContentIntent("acestream:?content_id=$contentId"))
+            if (infohash != null) {
+                channel.aceEngineUrl()?.let { engine ->
+                    runCatching { ensureRunning(context, engine) }
+                        .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+                }
+                LiveTvAceStream.playbackLink(link)?.let { playback ->
+                    add(
+                        Intent(Intent.ACTION_VIEW)
+                            .setDataAndType(android.net.Uri.parse(playback), "video/*")
+                            .setPackage(pkg),
+                    )
+                }
+                add(startContentIntent("acestream:?infohash=$infohash"))
+                add(startContentIntent("acestream:?url=" + android.net.Uri.encode("magnet:?xt=urn:btih:$infohash")))
+            }
+        }
+        for (intent in intents) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val started = runCatching { context.startActivity(intent) }
+                .onFailure { Log.w(TAG, "Ace Player did not take ${intent.data}", it) }
+                .isSuccess
+            if (started) return true
+        }
+        return false
+    }
+
+    private fun startContentIntent(data: String): Intent =
+        Intent("org.acestream.action.start_content")
+            .setData(android.net.Uri.parse(data))
+            // Straight into Ace Player, without the "open with" choice.
+            .putExtra("org.acestream.EXTRA_SELECTED_PLAYER", "{\"type\": 3}")
+
     private suspend fun waitUntilAnswers(engineUrl: String): Boolean {
         repeat(20) {
             if (answers(engineUrl)) return true

@@ -39,17 +39,20 @@ import kotlinx.coroutines.delay
 internal fun BoxScope.LiveTvAceLoadingMeter(uiState: PlayerUiState?) {
     val activeSession by LiveTvAceStream.session.collectAsState()
     val connecting by LiveTvAceStream.connecting.collectAsState()
+    val diagnostic by LiveTvAceStream.diagnostic.collectAsState()
     val streamUrl = uiState?.currentStreamUrl
     val playerLoading = uiState != null && (uiState.showLoadingOverlay || uiState.isBuffering) &&
         streamUrl != null && streamUrl.contains("/ace/")
-    val session = activeSession
-    if (session == null || !(connecting || playerLoading)) return
+    val shownSince = remember(connecting || playerLoading) { System.currentTimeMillis() }
+    if (!(connecting || playerLoading)) return
+    // Without a session (an engine that does not do them) the bar still shows, moving with time.
+    val session = activeSession ?: LiveTvAceStream.Session("", "", shownSince)
 
     var stats by remember(session) { mutableStateOf<LiveTvAceStream.SessionStats?>(null) }
     var elapsedMs by remember(session) { mutableStateOf(0L) }
     LaunchedEffect(session) {
         while (true) {
-            LiveTvAceStream.stats(session)?.let { stats = it }
+            if (session.statUrl.isNotEmpty()) LiveTvAceStream.stats(session)?.let { stats = it }
             elapsedMs = System.currentTimeMillis() - session.startedAtMs
             delay(1000)
         }
@@ -91,6 +94,9 @@ internal fun BoxScope.LiveTvAceLoadingMeter(uiState: PlayerUiState?) {
             style = MaterialTheme.typography.labelSmall,
             color = NuvioTheme.colors.TextSecondary,
         )
+        diagnostic?.let {
+            Text(text = it, style = MaterialTheme.typography.labelSmall, color = NuvioTheme.colors.TextTertiary, maxLines = 2)
+        }
     }
 }
 

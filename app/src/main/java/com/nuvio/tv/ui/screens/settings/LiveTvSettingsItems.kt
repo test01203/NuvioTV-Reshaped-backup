@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.PictureInPicture
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -30,6 +31,7 @@ internal fun LazyListScope.liveTvSettingsItems(
         val checked by LiveTvPreferences.enabled.collectAsStateWithLifecycle()
         val previews by LiveTvPreferences.previews.collectAsStateWithLifecycle()
         val previewSound by LiveTvPreferences.previewSound.collectAsStateWithLifecycle()
+        val acePlayer by LiveTvPreferences.acePlayer.collectAsStateWithLifecycle()
 
         // One item, so the previews row adds no list spacing while it is hidden.
         Column(verticalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.md)) {
@@ -60,6 +62,14 @@ internal fun LazyListScope.liveTvSettingsItems(
                         onFocused = onItemFocused,
                     )
                 }
+                ToggleSettingsItem(
+                    icon = Icons.Default.PlayCircle,
+                    title = stringResource(R.string.settings_live_tv_ace_player_title),
+                    subtitle = stringResource(R.string.settings_live_tv_ace_player_description),
+                    isChecked = acePlayer,
+                    onCheckedChange = { LiveTvPreferences.setAcePlayer(context, it) },
+                    onFocused = onItemFocused,
+                )
             }
         }
     }

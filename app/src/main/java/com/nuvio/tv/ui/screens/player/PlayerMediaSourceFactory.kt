@@ -122,7 +122,8 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
 
         val mp4SessionMode = !useParallelConnections && !isHls && !isDash &&
             resolvedMimeType == MimeTypes.VIDEO_MP4
-        val useChunkSessionSource = (useParallelConnections || mp4SessionMode) && !isHls && !isDash
+        val useChunkSessionSource = (useParallelConnections || mp4SessionMode) && !isHls && !isDash &&
+            !com.nuvio.tv.reshaped.livetv.LiveTvPlaybackRegistry.isLiveTv(url) // Nuvio RS hook: live streams are read in one go
         parallelStartupPrefetchUnlocked.set(!useChunkSessionSource)
         val networkUpstreamFactory: DataSource.Factory = if (useChunkSessionSource) {
             if (mp4SessionMode) {

@@ -65,6 +65,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.nuvio.tv.R
 import com.nuvio.tv.reshaped.livetv.LiveTvChannel
+import com.nuvio.tv.reshaped.livetv.aceEngineUrl
 import com.nuvio.tv.reshaped.livetv.LiveTvClock
 import com.nuvio.tv.reshaped.livetv.LiveTvDevice
 import com.nuvio.tv.reshaped.livetv.LiveTvHttp
@@ -172,6 +173,12 @@ internal class LiveTvPreviewPlayer(private val context: Context) {
     }
 
     fun play(channel: LiveTvChannel) {
+        // Ace Stream channels: the engine counts a preview as an outside player (and each one
+        // would start a P2P session), so they show no preview.
+        if (channel.aceEngineUrl() != null) {
+            stop()
+            return
+        }
         val hls = channel.streamUrl.contains(".m3u8", ignoreCase = true)
         triedHls = hls
         start(channel, hls)

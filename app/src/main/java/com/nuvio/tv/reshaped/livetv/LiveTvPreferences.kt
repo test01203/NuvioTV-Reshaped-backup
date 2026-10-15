@@ -14,6 +14,7 @@ object LiveTvPreferences {
     private const val KEY_ENABLED = "live_tv_enabled"
     private const val KEY_PREVIEWS = "live_tv_previews"
     private const val KEY_PREVIEW_SOUND = "live_tv_preview_sound"
+    private const val KEY_ACE_PLAYER = "live_tv_ace_player"
 
     private val _enabled = MutableStateFlow(false)
     val enabled: StateFlow<Boolean> = _enabled.asStateFlow()
@@ -26,6 +27,13 @@ object LiveTvPreferences {
     /** Whether the preview plays the channel's sound. */
     val previewSound: StateFlow<Boolean> = _previewSound.asStateFlow()
 
+    private val _acePlayer = MutableStateFlow(true)
+    /**
+     * Ace Stream channels open in Ace Stream's own player (free), not Nuvio's: on Android the
+     * engine stops other players after 5 minutes unless the viewer bought its "Proxy Server" option.
+     */
+    val acePlayer: StateFlow<Boolean> = _acePlayer.asStateFlow()
+
     @Volatile
     private var loaded = false
 
@@ -37,6 +45,7 @@ object LiveTvPreferences {
             _enabled.value = prefs.getBoolean(KEY_ENABLED, false)
             _previews.value = prefs.getBoolean(KEY_PREVIEWS, true)
             _previewSound.value = prefs.getBoolean(KEY_PREVIEW_SOUND, true)
+            _acePlayer.value = prefs.getBoolean(KEY_ACE_PLAYER, true)
             loaded = true
         }
     }
@@ -57,6 +66,12 @@ object LiveTvPreferences {
         ensureLoaded(context)
         _previewSound.value = enabled
         prefs(context).edit().putBoolean(KEY_PREVIEW_SOUND, enabled).apply()
+    }
+
+    fun setAcePlayer(context: Context, enabled: Boolean) {
+        ensureLoaded(context)
+        _acePlayer.value = enabled
+        prefs(context).edit().putBoolean(KEY_ACE_PLAYER, enabled).apply()
     }
 
     // Its own tiny file: this is read on the main thread when the menu is built.

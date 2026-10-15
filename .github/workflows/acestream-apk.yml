@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: acestream-apk-${{ github.ref }}
@@ -77,10 +77,19 @@ jobs:
       - name: Build APK
         run: ./gradlew :app:assembleFullDebug --stacktrace
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: NuvioTV-RS-AceStream
-          path: app/build/outputs/apk/full/debug/*.apk
-          if-no-files-found: error
-          retention-days: 14
+      # Each APK on its own, downloadable straight from the release page (no ZIP).
+      - name: Publish APKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p dist
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            src=$(ls app/build/outputs/apk/full/debug/*-"${abi}"-*.apk | head -1)
+            cp "$src" "dist/NuvioTV-RS-${abi}.apk"
+          done
+          TAG=acestream-latest
+          gh release delete "$TAG" --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+          gh release create "$TAG" dist/*.apk -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "NuvioTV RS - Ace Stream (latest build)" \
+            --notes "Build of ${GITHUB_SHA::7}. arm64-v8a: most Android TVs and boxes. armeabi-v7a: older 32-bit devices. x86_64 / x86: emulators such as BlueStacks."

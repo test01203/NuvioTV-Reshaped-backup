@@ -135,6 +135,10 @@ internal object LiveTvAceStream {
 
     private val sessionState = kotlinx.coroutines.flow.MutableStateFlow<Session?>(null)
     private val connectingState = kotlinx.coroutines.flow.MutableStateFlow(false)
+    private val diagnosticState = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
+    /** What the engine last answered while a channel opened, shown small under the loading meter. */
+    val diagnostic: kotlinx.coroutines.flow.StateFlow<String?> get() = diagnosticState
 
     /** The session of the Ace Stream channel playing now, for the loading meter. */
     val session: kotlinx.coroutines.flow.StateFlow<Session?> get() = sessionState
@@ -184,19 +188,30 @@ internal object LiveTvAceStream {
         return engineLinks.first()
     }
 
+    /** An engine session's playback link for [engineLink], opened without waiting; null when the engine gives none. */
+    suspend fun playbackLink(engineLink: String): String? = openSession(engineLink)?.first?.playbackUrl
+
     private enum class StreamStart { Streaming, Buffering, NoPeers }
 
     private suspend fun openSession(link: String): Pair<Session, String?>? {
         val url = link + (if ('?' in link) "&" else "?") + "format=json"
         return try {
-            val response = JSONObject(LiveTvHttp.text(url, emptyMap())).optJSONObject("response") ?: return null
-            val playback = response.optNonBlank("playback_url") ?: return null
-            val stat = response.optNonBlank("stat_url") ?: return null
+            val body = LiveTvHttp.text(url, emptyMap())
+            val json = JSONObject(body)
+            val response = json.optJSONObject("response")
+            val playback = response?.optNonBlank("playback_url")
+            val stat = response?.optNonBlank("stat_url")
+            if (playback == null || stat == null) {
+                diagnosticState.value = "engine: " + (json.optNonBlank("error") ?: body.take(160))
+                return null
+            }
+            diagnosticState.value = "engine: session started"
             Session(playback, stat, System.currentTimeMillis()) to response.optNonBlank("command_url")
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
             Log.w(TAG, "Engine session failed for $link", error)
+            diagnosticState.value = "engine: ${error.javaClass.simpleName}: ${error.message.orEmpty().take(140)}"
             null
         }
     }
@@ -234,6 +249,8 @@ internal object LiveTvAceStream {
                 ?.let { response.optDouble(it).toFloat() }
                 ?.let { if (it > 1f) it / 100f else it }
                 ?.coerceIn(0f, 1f)
+            diagnosticState.value = "engine: status=${response.optString("status")} peers=${response.optInt("peers", 0)}" +
+                (json.optNonBlank("error")?.let { " error=$it" } ?: "")
             SessionStats(
                 status = response.optString("status").ifBlank { "starting" },
                 peers = response.optInt("peers", 0),
