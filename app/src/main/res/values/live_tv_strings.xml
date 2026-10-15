@@ -40,6 +40,11 @@
     <string name="live_tv_source_m3u">M3U</string>
     <string name="live_tv_source_xtream">Xtream</string>
     <string name="live_tv_source_stalker">Stalker</string>
+    <string name="live_tv_source_ace_stream">Ace Stream</string>
+    <string name="live_tv_ace_query_hint">Search (optional)</string>
+    <string name="live_tv_ace_category_hint">Category (optional, e.g. sport)</string>
+    <string name="live_tv_ace_engine_hint">Engine address (http://127.0.0.1:6878)</string>
+    <string name="live_tv_ace_description">Live torrent channels from the Ace Stream catalogue (search-ace.stream), played through the Ace Stream engine app. Leave search empty for every channel. M3U playlists with acestream:// links also play through the engine.</string>
     <string name="live_tv_m3u_hint">Playlist link (https://…)</string>
     <string name="live_tv_xtream_server_hint">Server URL</string>
     <string name="live_tv_username_hint">Username</string>
@@ -100,6 +105,10 @@
     <string name="live_tv_error_xtream_invalid_url">Enter a valid HTTP or HTTPS Xtream server URL.</string>
     <string name="live_tv_error_xtream_no_channels">No playable channels were found for this Xtream login.</string>
     <string name="live_tv_error_xtream_failed">The Xtream provider could not be loaded.</string>
+    <string name="live_tv_error_ace_engine">Ace Stream engine not reachable. Install and open Ace Stream Engine (or Ace Stream Media), then try again.</string>
+    <string name="live_tv_error_ace_invalid_url">Enter a valid HTTP engine address, for example http://127.0.0.1:6878.</string>
+    <string name="live_tv_error_ace_no_channels">Ace Stream found no channels for this search.</string>
+    <string name="live_tv_error_ace_failed">The Ace Stream channels could not be loaded.</string>
 
     <!-- Phone setup page -->
     <string name="live_tv_web_title">Live TV on your TV</string>

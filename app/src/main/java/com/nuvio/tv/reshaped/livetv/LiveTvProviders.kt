@@ -453,6 +453,8 @@ enum class LiveTvError {
     /** The list loaded, but some of the portal's pages did not: a notice, not a failed load. */
     StalkerIncomplete,
     XtreamRequired, XtreamInvalidUrl, XtreamNoChannels, XtreamFailed,
+    /** The Ace Stream engine did not answer: not installed, not running, or a wrong address. */
+    AceStreamEngine, AceStreamInvalidUrl, AceStreamNoChannels, AceStreamFailed,
 }
 
 internal class LiveTvException(val error: LiveTvError) : Exception(error.name)

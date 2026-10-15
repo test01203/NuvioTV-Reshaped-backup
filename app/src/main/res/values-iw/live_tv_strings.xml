@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Nuvio Reshaped: Live TV, Ace Stream (Hebrew). Other Live TV strings fall back to English. -->
+    <string name="live_tv_source_ace_stream">Ace Stream</string>
+    <string name="live_tv_ace_query_hint">חיפוש (אופציונלי)</string>
+    <string name="live_tv_ace_category_hint">קטגוריה (אופציונלי, למשל sport)</string>
+    <string name="live_tv_ace_engine_hint">כתובת המנוע (http://127.0.0.1:6878)</string>
+    <string name="live_tv_ace_description">ערוצי טורנט חיים מהקטלוג של Ace Stream (search-ace.stream), שמתנגנים דרך אפליקציית המנוע של Ace Stream. השאירו את החיפוש ריק כדי לקבל את כל הערוצים. גם רשימות M3U עם קישורי acestream:// מתנגנות דרך המנוע.</string>
+    <string name="live_tv_error_ace_engine">אין חיבור למנוע של Ace Stream. התקינו ופתחו את Ace Stream Engine (או Ace Stream Media) ונסו שוב.</string>
+    <string name="live_tv_error_ace_invalid_url">הזינו כתובת HTTP תקינה למנוע, למשל http://127.0.0.1:6878.</string>
+    <string name="live_tv_error_ace_no_channels">לא נמצאו ערוצים של Ace Stream לחיפוש הזה.</string>
+    <string name="live_tv_error_ace_failed">לא ניתן לטעון את ערוצי Ace Stream.</string>
+</resources>

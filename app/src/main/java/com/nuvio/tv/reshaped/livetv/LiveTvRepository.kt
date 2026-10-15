@@ -231,6 +231,11 @@ object LiveTvRepository {
         launchAdd(LiveTvSource("", LiveTvSourceType.Stalker, normalized.portalUrl, stalker = normalized))
     }
 
+    fun loadAceStream(settings: LiveTvAceStreamSettings) {
+        val normalized = settings.normalized()
+        launchAdd(LiveTvSource("", LiveTvSourceType.AceStream, normalized.engineUrl, aceStream = normalized))
+    }
+
     /**
      * Saves a playlist sent from a phone as a source, then shows it. Blocking (the upload
      * server's thread): [input] is copied to a file first so it is never held in memory as a whole.
@@ -528,6 +533,8 @@ object LiveTvRepository {
 
     private fun validate(source: LiveTvSource): LiveTvError? = when (source.type) {
         LiveTvSourceType.M3u -> if (source.url.isBlank()) LiveTvError.InvalidUrl else null
+        LiveTvSourceType.AceStream ->
+            if (!source.aceStream.engineUrl.isHttpUrl()) LiveTvError.AceStreamInvalidUrl else null
         LiveTvSourceType.Xtream -> when {
             !source.xtream.isConfigured -> LiveTvError.XtreamRequired
             !source.xtream.serverUrl.isHttpUrl() -> LiveTvError.XtreamInvalidUrl
@@ -544,6 +551,7 @@ object LiveTvRepository {
         LiveTvSourceType.M3u -> LiveTvError.LoadFailed
         LiveTvSourceType.Xtream -> LiveTvError.XtreamFailed
         LiveTvSourceType.Stalker -> LiveTvError.StalkerFailed
+        LiveTvSourceType.AceStream -> LiveTvError.AceStreamFailed
     }
 
     /** One source's channels (tagged with the source) and guide links, plus a notice for a partial load. */
@@ -554,6 +562,9 @@ object LiveTvRepository {
                 val file = withContext(Dispatchers.IO) { storage?.playlistFile(source.id) }
                 val playlist = when {
                     file != null -> withContext(Dispatchers.IO) { file.bufferedReader().useLines { parseM3uPlaylist(it) } }
+                    // A single pasted Ace Stream link (acestream://… or the bare id).
+                    source.url.isAceStreamLink() ->
+                        ParsedM3uPlaylist(listOfNotNull(LiveTvAceStream.singleChannel(source.url)), emptyList())
                     source.url.isHttpUrl() -> fetchM3u(source.url)
                     else -> throw LiveTvException(if (source.url.startsWith("http", ignoreCase = true)) LiveTvError.InvalidUrl else LiveTvError.FileEmpty)
                 }
@@ -573,6 +584,12 @@ object LiveTvRepository {
                 val (channels, incomplete) = LiveTvStalker.channels(source.stalker)
                 if (channels.isEmpty()) throw LiveTvException(LiveTvError.StalkerNoChannels)
                 if (incomplete) notice = LiveTvError.StalkerIncomplete
+                channels to emptyList()
+            }
+            LiveTvSourceType.AceStream -> {
+                val channels = LiveTvAceStream.channels(source.aceStream)
+                if (channels.isEmpty()) throw LiveTvException(LiveTvError.AceStreamNoChannels)
+                // The search's guide is only the programme on air; the channels' tvg-id matches public guides.
                 channels to emptyList()
             }
         }

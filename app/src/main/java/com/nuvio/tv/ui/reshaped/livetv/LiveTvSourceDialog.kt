@@ -46,6 +46,8 @@ import androidx.tv.material3.Text
 import com.nuvio.tv.R
 import com.nuvio.tv.core.qr.QrCodeGenerator
 import com.nuvio.tv.reshaped.net.LanAddress
+import com.nuvio.tv.reshaped.livetv.ACE_STREAM_DEFAULT_ENGINE
+import com.nuvio.tv.reshaped.livetv.LiveTvAceStreamSettings
 import com.nuvio.tv.reshaped.livetv.LiveTvRepository
 import com.nuvio.tv.reshaped.livetv.LiveTvSetupServer
 import com.nuvio.tv.reshaped.livetv.LiveTvSource
@@ -76,6 +78,9 @@ internal fun LiveTvSourceDialog(onDismiss: () -> Unit) {
     var stalkerMac by rememberSaveable { mutableStateOf("") }
     var stalkerUser by rememberSaveable { mutableStateOf("") }
     var stalkerPassword by rememberSaveable { mutableStateOf("") }
+    var aceQuery by rememberSaveable { mutableStateOf("") }
+    var aceCategory by rememberSaveable { mutableStateOf("") }
+    var aceEngine by rememberSaveable { mutableStateOf(ACE_STREAM_DEFAULT_ENGINE) }
     val firstFocus = remember { FocusRequester() }
 
     // Back to the list once a source was added (or entered again) while the dialog was open; the
@@ -89,6 +94,7 @@ internal fun LiveTvSourceDialog(onDismiss: () -> Unit) {
             adding = false
             m3uUrl = ""; xtreamServer = ""; xtreamUser = ""; xtreamPassword = ""
             stalkerPortal = ""; stalkerMac = ""; stalkerUser = ""; stalkerPassword = ""
+            aceQuery = ""; aceCategory = ""
         }
     }
 
@@ -216,6 +222,11 @@ internal fun LiveTvSourceDialog(onDismiss: () -> Unit) {
                             selected = tab == LiveTvSourceType.Stalker,
                             onClick = { tab = LiveTvSourceType.Stalker },
                         )
+                        LiveTvPillButton(
+                            text = stringResource(R.string.live_tv_source_ace_stream),
+                            selected = tab == LiveTvSourceType.AceStream,
+                            onClick = { tab = LiveTvSourceType.AceStream },
+                        )
                     }
 
                     when (tab) {
@@ -236,6 +247,18 @@ internal fun LiveTvSourceDialog(onDismiss: () -> Unit) {
                                 LiveTvTextField(stalkerUser, { stalkerUser = it }, stringResource(R.string.live_tv_optional_username_hint), Modifier.weight(1f), keyboardType = KeyboardType.Text)
                                 LiveTvTextField(stalkerPassword, { stalkerPassword = it }, stringResource(R.string.live_tv_optional_password_hint), Modifier.weight(1f), password = true)
                             }
+                        }
+                        LiveTvSourceType.AceStream -> {
+                            Row(horizontalArrangement = Arrangement.spacedBy(NuvioTheme.spacing.sm)) {
+                                LiveTvTextField(aceQuery, { aceQuery = it }, stringResource(R.string.live_tv_ace_query_hint), Modifier.weight(1f), keyboardType = KeyboardType.Text)
+                                LiveTvTextField(aceCategory, { aceCategory = it }, stringResource(R.string.live_tv_ace_category_hint), Modifier.weight(1f), keyboardType = KeyboardType.Text)
+                            }
+                            LiveTvTextField(aceEngine, { aceEngine = it }, stringResource(R.string.live_tv_ace_engine_hint))
+                            Text(
+                                text = stringResource(R.string.live_tv_ace_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = NuvioTheme.colors.TextSecondary,
+                            )
                         }
                     }
 
@@ -271,6 +294,9 @@ internal fun LiveTvSourceDialog(onDismiss: () -> Unit) {
                                     LiveTvSourceType.Stalker -> LiveTvRepository.loadStalker(
                                         LiveTvStalkerSettings(stalkerPortal, stalkerMac, stalkerUser, stalkerPassword),
                                     )
+                                    LiveTvSourceType.AceStream -> LiveTvRepository.loadAceStream(
+                                        LiveTvAceStreamSettings(aceEngine, aceQuery, aceCategory),
+                                    )
                                 }
                             },
                         )
@@ -296,6 +322,7 @@ private fun LiveTvSourceRow(
             LiveTvSourceType.M3u -> R.string.live_tv_source_m3u
             LiveTvSourceType.Xtream -> R.string.live_tv_source_xtream
             LiveTvSourceType.Stalker -> R.string.live_tv_source_stalker
+            LiveTvSourceType.AceStream -> R.string.live_tv_source_ace_stream
         },
     )
     Row(

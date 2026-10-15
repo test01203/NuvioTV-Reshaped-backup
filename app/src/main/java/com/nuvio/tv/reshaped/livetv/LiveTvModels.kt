@@ -61,7 +61,7 @@ data class LiveTvProgramme(
     val stopEpochMs: Long,
 )
 
-enum class LiveTvSourceType { M3u, Stalker, Xtream }
+enum class LiveTvSourceType { M3u, Stalker, Xtream, AceStream }
 
 @Immutable
 data class LiveTvStalkerSettings(
@@ -82,6 +82,17 @@ data class LiveTvXtreamSettings(
     val isConfigured: Boolean get() = serverUrl.isNotBlank() && username.isNotBlank() && password.isNotBlank()
 }
 
+/**
+ * Ace Stream channels from the engine's search (the catalogue search-ace.stream shows). A blank
+ * [query] lists every channel; [category] narrows it (for example "sport").
+ */
+@Immutable
+data class LiveTvAceStreamSettings(
+    val engineUrl: String = ACE_STREAM_DEFAULT_ENGINE,
+    val query: String = "",
+    val category: String = "",
+)
+
 /** One saved channel source. Several can be added; their channels show as one list. */
 @Immutable
 data class LiveTvSource(
@@ -91,11 +102,16 @@ data class LiveTvSource(
     val url: String = "",
     val stalker: LiveTvStalkerSettings = LiveTvStalkerSettings(),
     val xtream: LiveTvXtreamSettings = LiveTvXtreamSettings(),
+    val aceStream: LiveTvAceStreamSettings = LiveTvAceStreamSettings(),
 ) {
     /** A short name for lists: the host of a link, or the imported file's name. */
     val label: String
-        get() = url.substringAfter("://", url).substringBefore('/').substringBefore('?')
-            .substringAfterLast('@').ifBlank { url }
+        get() = if (type == LiveTvSourceType.AceStream) {
+            listOf("Ace Stream", aceStream.query, aceStream.category).filter(String::isNotBlank).joinToString(" · ")
+        } else {
+            url.substringAfter("://", url).substringBefore('/').substringBefore('?')
+                .substringAfterLast('@').ifBlank { url }
+        }
 
     /** Two sources with the same identity are one: adding it again replaces it. */
     internal val identity: String
@@ -103,6 +119,8 @@ data class LiveTvSource(
             LiveTvSourceType.M3u -> "m3u|${url.lowercase()}"
             LiveTvSourceType.Xtream -> "xtream|${xtream.serverUrl.lowercase()}|${xtream.username}"
             LiveTvSourceType.Stalker -> "stalker|${stalker.portalUrl.lowercase()}|${stalker.macAddress}"
+            LiveTvSourceType.AceStream ->
+                "ace|${aceStream.engineUrl.lowercase()}|${aceStream.query.lowercase()}|${aceStream.category}"
         }
 }
 

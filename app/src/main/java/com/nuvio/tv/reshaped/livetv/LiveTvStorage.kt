@@ -54,6 +54,11 @@ internal class LiveTvStorage(context: Context, private val profileId: Int) {
             url = optString("url"),
             stalker = LiveTvStalkerSettings(optString("portal"), optString("mac"), optString("stalkerUser"), optString("stalkerPassword")),
             xtream = LiveTvXtreamSettings(optString("server"), optString("xtreamUser"), optString("xtreamPassword")),
+            aceStream = LiveTvAceStreamSettings(
+                optString("aceEngine").ifBlank { ACE_STREAM_DEFAULT_ENGINE },
+                optString("aceQuery"),
+                optString("aceCategory"),
+            ),
         )
     }
 
@@ -73,6 +78,11 @@ internal class LiveTvStorage(context: Context, private val profileId: Int) {
                 put("server", xtream.serverUrl)
                 put("xtreamUser", xtream.username)
                 put("xtreamPassword", xtream.password)
+            }
+            LiveTvSourceType.AceStream -> {
+                put("aceEngine", aceStream.engineUrl)
+                put("aceQuery", aceStream.query)
+                put("aceCategory", aceStream.category)
             }
         }
     }
@@ -96,7 +106,8 @@ internal class LiveTvStorage(context: Context, private val profileId: Int) {
                 id, LiveTvSourceType.Stalker, url,
                 stalker = LiveTvStalkerSettings(string(STALKER_PORTAL).orEmpty(), string(STALKER_MAC).orEmpty(), string(STALKER_USER).orEmpty(), string(STALKER_PASSWORD).orEmpty()),
             ).takeIf { it.stalker.isConfigured }
-            null -> null
+            // Added after sources became a list: never a legacy single source.
+            LiveTvSourceType.AceStream, null -> null
         }
         val sources = listOfNotNull(source)
         saveSources(sources)

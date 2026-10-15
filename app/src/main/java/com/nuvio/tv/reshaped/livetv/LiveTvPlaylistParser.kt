@@ -49,7 +49,12 @@ internal fun parseM3uPlaylist(lines: Sequence<String>): ParsedM3uPlaylist {
                 pendingHeaders = pendingHeaders + parseExtHttpHeaders(line.substringAfter(':'))
             line.startsWith("#") -> Unit
             else -> {
-                val url = line.substringBefore('|').trim()
+                val listed = line.substringBefore('|').trim()
+                // Ace Stream entries (acestream://<id>) play through the engine on this device.
+                val url = listed.aceStreamContentId()
+                    ?.takeIf { listed.isAceStreamLink() }
+                    ?.let { LiveTvAceStream.contentUrl(ACE_STREAM_DEFAULT_ENGINE, it) }
+                    ?: listed
                 val current = metadata
                 metadata = null
                 val headers = pendingHeaders
