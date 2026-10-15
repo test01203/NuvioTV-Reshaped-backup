@@ -50,7 +50,15 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Build APK
-        run: ./gradlew :acetv:assembleRelease --stacktrace
+        run: |
+          set -o pipefail
+          ./gradlew :acetv:assembleRelease --stacktrace 2>&1 | tee build.log || {
+            # Compiler and build errors as annotations, readable without the full log.
+            grep -E "^e: |error:|What went wrong|^> " build.log | head -40 | while IFS= read -r line; do
+              echo "::error::${line:0:400}"
+            done
+            exit 1
+          }
 
       - name: Publish APK
         env:
