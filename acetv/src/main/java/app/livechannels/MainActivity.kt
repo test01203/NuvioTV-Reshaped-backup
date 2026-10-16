@@ -25,8 +25,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        CrashLog.install(this)
         val model = AppModel(this)
-        setContent { AppTheme { App(model) } }
+        val lastCrash = CrashLog.take(this)
+        setContent {
+            AppTheme {
+                var crash by remember { mutableStateOf(lastCrash) }
+                val shown = crash
+                if (shown != null) CrashScreen(shown) { crash = null } else App(model)
+            }
+        }
     }
 }
 

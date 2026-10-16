@@ -49,7 +49,7 @@ import app.livechannels.LoadState
 import app.livechannels.R
 import kotlinx.coroutines.delay
 
-private const val ALL = ""
+private const val ALL = "*all"
 private const val FAVORITES = "*favorites"
 
 /** Ace Stream's catalogue categories, by their names in the catalogue. */
@@ -97,6 +97,7 @@ fun ChannelsScreen(
     var category by rememberSaveable { mutableStateOf(model.prefs.lastCategory ?: ALL) }
     val categories = remember(channels) {
         channels.groupingBy { it.category }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
+            .filter { it != ALL && it != FAVORITES }
     }
     val visible = remember(channels, category, model.favorites) {
         when (category) {
