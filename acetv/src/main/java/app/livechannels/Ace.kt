@@ -340,7 +340,10 @@ object Sessions {
     class Stats(val status: String, val peers: Int, val speedDownKbps: Int, val progress: Float?)
 
     /** The engine's direct MPEG-TS stream, as Ace Stream's own players use. */
-    fun streamUrl(engineUrl: String, infohash: String): String = "${engineUrl.trimEnd('/')}/ace/getstream?infohash=$infohash"
+    fun streamUrl(engineUrl: String, infohash: String): String =
+        // A player id of its own for every opening, so the engine never mixes this session up
+        // with the previous channel's while that one is still closing.
+        "${engineUrl.trimEnd('/')}/ace/getstream?infohash=$infohash&pid=${java.util.UUID.randomUUID().toString().replace("-", "").take(16)}"
 
     /** Every session this app opened and has not closed yet. */
     private val active = java.util.Collections.synchronizedSet(LinkedHashSet<String>())

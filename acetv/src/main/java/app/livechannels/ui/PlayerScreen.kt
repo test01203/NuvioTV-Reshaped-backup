@@ -86,7 +86,9 @@ private const val MAX_STREAMS = 5
 /** A stream that found no peer at all after this long is given up for the next one. */
 private const val NO_PEER_GIVE_UP_MS = 25_000L
 /** How long the player gets to show a picture once it opened the stream. */
-private const val PLAYER_WAIT_MS = 60_000L
+private const val PLAYER_WAIT_MS = 30_000L
+/** With the engine already streaming, a stream that shows no picture this long is reloaded once. */
+private const val RELOAD_AFTER_MS = 20_000L
 
 @OptIn(UnstableApi::class)
 private fun buildPlayer(context: Context, tap: SpeechTap): ExoPlayer {
@@ -124,7 +126,7 @@ private fun buildPlayer(context: Context, tap: SpeechTap): ExoPlayer {
 }
 
 /** True once the player shows the stream (a picture, or sound for a radio), false on an error or timeout. */
-private suspend fun ExoPlayer.awaitPlaying(): Boolean = withTimeoutOrNull(PLAYER_WAIT_MS) {
+private suspend fun ExoPlayer.awaitPlaying(timeoutMs: Long = PLAYER_WAIT_MS): Boolean = withTimeoutOrNull(timeoutMs) {
     suspendCancellableCoroutine { continuation ->
         val listener = object : Player.Listener {
             override fun onRenderedFirstFrame() {
@@ -222,10 +224,20 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
                     continue
                 }
                 phase = Phase.Buffering
-                player.setMediaItem(MediaItem.fromUri(opened?.playbackUrl ?: link))
+                val item = MediaItem.fromUri(opened?.playbackUrl ?: link)
+                player.setMediaItem(item)
                 player.prepare()
                 player.playWhenReady = true
-                if (player.awaitPlaying()) {
+                var playing = player.awaitPlaying(RELOAD_AFTER_MS)
+                if (!playing) {
+                    // Stuck with no picture: open the same stream again once before moving on.
+                    player.stop()
+                    player.setMediaItem(item)
+                    player.prepare()
+                    player.playWhenReady = true
+                    playing = player.awaitPlaying()
+                }
+                if (playing) {
                     phase = Phase.Playing
                     // Holds the session open until the channel changes or the player closes.
                     awaitCancellation()
