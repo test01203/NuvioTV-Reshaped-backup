@@ -23,6 +23,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.activity.compose.BackHandler
+import app.livechannels.HebrewTitles
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +48,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
@@ -75,8 +79,6 @@ private enum class Phase { Connecting, Buffering, Playing, Failed }
 private const val MAX_STREAMS = 5
 /** A stream that found no peer at all after this long is given up for the next one. */
 private const val NO_PEER_GIVE_UP_MS = 25_000L
-/** How long the engine gets to start streaming before the player opens the stream anyway. */
-private const val STREAM_WAIT_MS = 35_000L
 /** How long the player gets to show a picture once it opened the stream. */
 private const val PLAYER_WAIT_MS = 60_000L
 
@@ -94,7 +96,17 @@ private fun buildPlayer(context: Context): ExoPlayer {
     }
     val sources = DefaultMediaSourceFactory(DefaultDataSource.Factory(context, http), extractors)
         .setLoadErrorHandlingPolicy(retries)
-    return ExoPlayer.Builder(context).setMediaSourceFactory(sources).build()
+    // Picture after one second of buffer (Media3 waits 2.5 s by default); more keeps loading while it plays.
+    val loadControl = DefaultLoadControl.Builder()
+        .setBufferDurationsMs(15_000, 50_000, 1_000, 2_000)
+        .setPrioritizeTimeOverSizeThresholds(true)
+        .build()
+    return ExoPlayer.Builder(context).setMediaSourceFactory(sources).setLoadControl(loadControl).build().apply {
+        // English sound where the broadcast carries it; otherwise its own.
+        trackSelectionParameters = trackSelectionParameters.buildUpon()
+            .setPreferredAudioLanguages("en", "eng")
+            .build()
+    }
 }
 
 /** True once the player shows the stream (a picture, or sound for a radio), false on an error or timeout. */
@@ -135,6 +147,13 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
     var infoUntil by remember { mutableLongStateOf(System.currentTimeMillis() + 6_000) }
     var errorText by remember { mutableStateOf<String?>(null) }
     val now = rememberClock()
+    val scope = rememberCoroutineScope()
+    val subtitles = remember { SubtitleController(scope, model.prefs) }
+    var panelOpen by remember { mutableStateOf(false) }
+    val tmdbKey = model.prefs.tmdbKey
+    // Subtitles belong to a programme: a new channel or the next programme starts over.
+    val programme = channel.programmeAt(now)
+    LaunchedEffect(index, programme?.startMs) { subtitles.reset(programme) }
 
     LaunchedEffect(index, attempt) {
         phase = Phase.Connecting
@@ -187,6 +206,10 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
 
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    BackHandler(enabled = panelOpen) {
+        panelOpen = false
+        runCatching { focus.requestFocus() }
+    }
 
     Box(
         Modifier
@@ -195,8 +218,13 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
             .focusRequester(focus)
             .focusable()
             .onKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                if (event.type != KeyEventType.KeyDown || panelOpen) return@onKeyEvent false
                 when (event.nativeKeyEvent.keyCode) {
+                    KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_CAPTIONS, KeyEvent.KEYCODE_MENU -> {
+                        panelOpen = true
+                        if (subtitles.status == SubtitleController.Status.Idle) subtitles.search()
+                        true
+                    }
                     KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP -> {
                         index = (index - 1 + list.size) % list.size
                         true
@@ -224,9 +252,11 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
             modifier = Modifier.fillMaxSize(),
         )
 
+        SubtitleLine(subtitles)
         if (System.currentTimeMillis() < infoUntil || phase != Phase.Playing) {
-            InfoBar(channel, index + 1, now, Modifier.align(Alignment.TopStart).padding(36.dp))
+            InfoBar(channel, index + 1, now, tmdbKey, Modifier.align(Alignment.TopStart).padding(36.dp))
         }
+        if (panelOpen) SubtitlePanel(subtitles, tmdbKey)
         LaunchedEffect(infoUntil) {
             delay((infoUntil - System.currentTimeMillis()).coerceAtLeast(0))
             infoUntil = 0
@@ -261,22 +291,20 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
  */
 private suspend fun waitForStream(session: Sessions.Session, onStats: (Sessions.Stats) -> Unit): Boolean {
     val started = System.currentTimeMillis()
-    var sawPeers = false
     while (true) {
         val elapsed = System.currentTimeMillis() - started
         Sessions.stats(session)?.let { stats ->
             onStats(stats)
-            if (stats.peers > 0) sawPeers = true
-            if (stats.status == "dl") return true
+            // The first peer is enough: the player starts on the first data and keeps loading.
+            if (stats.peers > 0 || stats.status == "dl") return true
         }
-        if (!sawPeers && elapsed >= NO_PEER_GIVE_UP_MS) return false
-        if (elapsed >= STREAM_WAIT_MS) return sawPeers
-        delay(1_000)
+        if (elapsed >= NO_PEER_GIVE_UP_MS) return false
+        delay(500)
     }
 }
 
 @Composable
-private fun InfoBar(channel: Channel, number: Int, now: Long, modifier: Modifier = Modifier) {
+private fun InfoBar(channel: Channel, number: Int, now: Long, tmdbKey: String, modifier: Modifier = Modifier) {
     Row(
         modifier.widthIn(max = 720.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.7f)).padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -287,18 +315,24 @@ private fun InfoBar(channel: Channel, number: Int, now: Long, modifier: Modifier
             Text("$number  ${channel.name}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
                 color = Palette.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             channel.programmeAt(now)?.let { programme ->
-                Text(stringResource(R.string.now) + ": " + programme.title, style = MaterialTheme.typography.bodySmall,
+                Text(stringResource(R.string.now) + ": " + HebrewTitles.of(programme.title, tmdbKey), style = MaterialTheme.typography.bodySmall,
                     color = Palette.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val progress = (now - programme.startMs).toFloat() / (programme.stopMs - programme.startMs).coerceAtLeast(1)
                 ProgressBar(progress, Modifier.padding(vertical = 4.dp).width(240.dp), height = 3.dp, fill = Palette.TextPrimary)
             }
             channel.programmeAfter(now)?.let { programme ->
-                Text(stringResource(R.string.next) + ": " + programme.title, style = MaterialTheme.typography.bodySmall,
+                Text(stringResource(R.string.next) + ": " + HebrewTitles.of(programme.title, tmdbKey), style = MaterialTheme.typography.bodySmall,
                     color = Palette.TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         HealthDot(channel.health)
     }
+    Text(
+        stringResource(R.string.subs_hint),
+        style = MaterialTheme.typography.labelSmall,
+        color = Palette.TextTertiary,
+        modifier = modifier.padding(top = 112.dp),
+    )
 }
 
 @Composable

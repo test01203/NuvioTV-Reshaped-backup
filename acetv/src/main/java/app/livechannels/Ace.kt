@@ -420,6 +420,16 @@ class Prefs(context: Context) {
         get() = prefs.getStringSet("favorites", emptySet()).orEmpty().toSet()
         set(value) = prefs.edit().putStringSet("favorites", value).apply()
 
+    /** The viewer's own TMDB key, for matching the guide's titles to films (subtitles). Kept on the device only. */
+    var tmdbKey: String
+        get() = prefs.getString("tmdb_key", null).orEmpty()
+        set(value) = prefs.edit().putString("tmdb_key", value.trim()).apply()
+
+    /** Subtitles were chosen: the next programmes get them too. */
+    var autoSubtitles: Boolean
+        get() = prefs.getBoolean("auto_subtitles", false)
+        set(value) = prefs.edit().putBoolean("auto_subtitles", value).apply()
+
     var lastCategory: String?
         get() = prefs.getString("last_category", null)
         set(value) = prefs.edit().putString("last_category", value).apply()

@@ -50,4 +50,21 @@
     <string name="cat_series">Series</string>
     <string name="cat_regional">Regional</string>
     <string name="cat_other">Other</string>
+    <string name="subs_title">Hebrew subtitles</string>
+    <string name="subs_matched">Matched: %1$s</string>
+    <string name="subs_no_guide">No programme guide for this channel, so the film cannot be identified.</string>
+    <string name="subs_searching">Searching…</string>
+    <string name="subs_no_match">The programme could not be matched to a film.</string>
+    <string name="subs_no_match_key">Not matched. Add a TMDB key in Settings to match guide titles in Russian.</string>
+    <string name="subs_none">No Hebrew subtitles found for this film.</string>
+    <string name="subs_loading">Loading subtitles…</string>
+    <string name="subs_failed">The subtitles could not be loaded.</string>
+    <string name="subs_offset">Shift: %1$.1f s</string>
+    <string name="subs_next_now">Next line now</string>
+    <string name="subs_prev_now">Previous line now</string>
+    <string name="subs_off">Off</string>
+    <string name="subs_search">Search again</string>
+    <string name="subs_hint">◀ ▶  Subtitles</string>
+    <string name="setting_tmdb">TMDB key (for subtitles and Hebrew titles)</string>
+    <string name="setting_tmdb_desc">A free key from themoviedb.org (Settings → API). It stays on this device and matches the guide\'s titles to films.</string>
 </resources>

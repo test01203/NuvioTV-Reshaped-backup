@@ -50,4 +50,21 @@
     <string name="cat_series">סדרות</string>
     <string name="cat_regional">אזורי</string>
     <string name="cat_other">אחר</string>
+    <string name="subs_title">כתוביות בעברית</string>
+    <string name="subs_matched">זוהה: %1$s</string>
+    <string name="subs_no_guide">אין מדריך שידורים לערוץ הזה, אז אי אפשר לזהות את הסרט.</string>
+    <string name="subs_searching">מחפש…</string>
+    <string name="subs_no_match">לא נמצא סרט שמתאים לתוכנית.</string>
+    <string name="subs_no_match_key">לא זוהה. הוסיפו מפתח TMDB בהגדרות כדי לזהות שמות ברוסית.</string>
+    <string name="subs_none">לא נמצאו כתוביות בעברית לסרט הזה.</string>
+    <string name="subs_loading">טוען כתוביות…</string>
+    <string name="subs_failed">לא ניתן לטעון את הכתוביות.</string>
+    <string name="subs_offset">הזזה: %1$.1f שנ׳</string>
+    <string name="subs_next_now">השורה הבאה עכשיו</string>
+    <string name="subs_prev_now">השורה הקודמת עכשיו</string>
+    <string name="subs_off">כבוי</string>
+    <string name="subs_search">חיפוש מחדש</string>
+    <string name="subs_hint">◀ ▶  כתוביות</string>
+    <string name="setting_tmdb">מפתח TMDB (לכתוביות ולשמות בעברית)</string>
+    <string name="setting_tmdb_desc">מפתח חינמי מ-themoviedb.org (הגדרות ← API). נשמר רק במכשיר הזה ומשמש לזיהוי הסרטים מהמדריך.</string>
 </resources>

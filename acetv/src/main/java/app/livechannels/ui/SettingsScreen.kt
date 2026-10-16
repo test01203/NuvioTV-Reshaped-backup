@@ -40,6 +40,7 @@ fun SettingsScreen(model: AppModel, onBack: () -> Unit, onEngineChanged: () -> U
     var engine by remember { mutableStateOf(model.prefs.engineUrl) }
     var acePlayer by remember { mutableStateOf(model.prefs.acePlayer) }
     var hideOffline by remember { mutableStateOf(model.hideOffline) }
+    var tmdbKey by remember { mutableStateOf(model.prefs.tmdbKey) }
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
 
@@ -89,8 +90,13 @@ fun SettingsScreen(model: AppModel, onBack: () -> Unit, onEngineChanged: () -> U
                 .border(2.dp, if (fieldFocused) Palette.TextPrimary else Color.Transparent, RoundedCornerShape(12.dp))
                 .padding(horizontal = 16.dp, vertical = 14.dp),
         )
+        Text(stringResource(R.string.setting_tmdb), style = MaterialTheme.typography.bodyLarge, color = Palette.TextPrimary,
+            modifier = Modifier.padding(top = 8.dp))
+        Text(stringResource(R.string.setting_tmdb_desc), style = MaterialTheme.typography.bodySmall, color = Palette.TextSecondary)
+        SettingField(tmdbKey, { tmdbKey = it }, KeyboardType.Ascii) { model.prefs.tmdbKey = tmdbKey }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 8.dp)) {
             PillButton(stringResource(R.string.save), {
+                model.prefs.tmdbKey = tmdbKey
                 if (engine.trim().trimEnd('/') != model.prefs.engineUrl) {
                     model.prefs.engineUrl = engine
                     onEngineChanged()
@@ -100,6 +106,26 @@ fun SettingsScreen(model: AppModel, onBack: () -> Unit, onEngineChanged: () -> U
             PillButton(stringResource(R.string.back), onBack)
         }
     }
+}
+
+@Composable
+private fun SettingField(value: String, onChange: (String) -> Unit, keyboard: KeyboardType, onDone: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    BasicTextField(
+        value = value,
+        onValueChange = onChange,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyLarge.copy(color = Palette.TextPrimary),
+        cursorBrush = SolidColor(Palette.TextPrimary),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onDone() }),
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
+            .background(Palette.Elevated, RoundedCornerShape(12.dp))
+            .border(2.dp, if (focused) Palette.TextPrimary else Color.Transparent, RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    )
 }
 
 @Composable

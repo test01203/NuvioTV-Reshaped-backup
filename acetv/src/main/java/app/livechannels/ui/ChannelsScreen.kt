@@ -45,6 +45,7 @@ import app.livechannels.AceException
 import app.livechannels.AppModel
 import app.livechannels.Channel
 import app.livechannels.Engine
+import app.livechannels.HebrewTitles
 import app.livechannels.LoadState
 import app.livechannels.R
 import kotlinx.coroutines.delay
@@ -173,6 +174,7 @@ fun ChannelsScreen(
                             ChannelRow(
                                 channel = channel,
                                 now = now,
+                                tmdbKey = model.prefs.tmdbKey,
                                 isFavorite = channel.key in model.favorites,
                                 onClick = { onPlay(visible, index) },
                                 onLongClick = { model.toggleFavorite(channel) },
@@ -208,7 +210,7 @@ private fun CategoryRow(label: String, count: Int, selected: Boolean, onFocused:
 }
 
 @Composable
-private fun ChannelRow(channel: Channel, now: Long, isFavorite: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun ChannelRow(channel: Channel, now: Long, tmdbKey: String, isFavorite: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val secondary = if (focused) Color.Black.copy(alpha = 0.6f) else Palette.TextSecondary
     FocusCard(onClick = onClick, onLongClick = onLongClick, modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }) {
@@ -218,7 +220,7 @@ private fun ChannelRow(channel: Channel, now: Long, isFavorite: Boolean, onClick
                 Text(channel.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val programme = channel.programmeAt(now)
                 if (programme != null) {
-                    Text(programme.title, style = MaterialTheme.typography.bodySmall, color = secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(HebrewTitles.of(programme.title, tmdbKey), style = MaterialTheme.typography.bodySmall, color = secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val progress = (now - programme.startMs).toFloat() / (programme.stopMs - programme.startMs).coerceAtLeast(1)
                     ProgressBar(progress, Modifier.padding(top = 4.dp).widthIn(max = 180.dp).fillMaxWidth(), height = 3.dp,
                         fill = if (focused) Color.Black else Palette.TextPrimary)
