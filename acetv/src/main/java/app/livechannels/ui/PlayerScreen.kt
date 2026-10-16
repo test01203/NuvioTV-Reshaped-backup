@@ -155,6 +155,7 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
     val programme = channel.programmeAt(now)
     LaunchedEffect(index, programme?.startMs) { subtitles.reset(programme) }
 
+    LaunchedEffect(index) { model.lastChannelKey = list[index].key }
     LaunchedEffect(index, attempt) {
         phase = Phase.Connecting
         stats = null

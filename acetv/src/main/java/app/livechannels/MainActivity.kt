@@ -57,6 +57,8 @@ class AppModel(context: Context) {
     var channels by mutableStateOf<List<Channel>>(emptyList())
     var favorites by mutableStateOf(prefs.favorites)
     var hideOffline by mutableStateOf(prefs.hideOffline)
+    /** The channel last watched (or zapped to): the list comes back focused on it. */
+    var lastChannelKey: String? = null
 
     val shownChannels: List<Channel>
         get() = if (hideOffline) channels.filter { it.health != Health.Offline } else channels

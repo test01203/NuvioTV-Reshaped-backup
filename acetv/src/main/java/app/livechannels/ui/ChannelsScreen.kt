@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -109,8 +111,18 @@ fun ChannelsScreen(
     }
     val now = rememberClock()
     val firstFocus = remember { FocusRequester() }
+    val channelFocus = remember { FocusRequester() }
+    val listState = rememberLazyListState()
+    // Back from a channel: the list returns to it; otherwise to the category last chosen.
+    val returnIndex = remember(visible) { visible.indexOfFirst { it.key == model.lastChannelKey } }
     LaunchedEffect(model.loadState) {
-        if (model.loadState == LoadState.Ready) runCatching { firstFocus.requestFocus() }
+        if (model.loadState != LoadState.Ready) return@LaunchedEffect
+        if (returnIndex >= 0) {
+            listState.scrollToItem(returnIndex)
+            withFrameNanos { }
+            if (runCatching { channelFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+        }
+        runCatching { firstFocus.requestFocus() }
     }
 
     Row(Modifier.fillMaxSize().then(ScreenPadding), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
@@ -144,7 +156,7 @@ fun ChannelsScreen(
                             category = entry
                             model.prefs.lastCategory = entry
                         },
-                        modifier = if (entry == ALL) Modifier.focusRequester(firstFocus) else Modifier,
+                        modifier = if (entry == category) Modifier.focusRequester(firstFocus) else Modifier,
                     )
                 }
             }
@@ -168,7 +180,7 @@ fun ChannelsScreen(
                 LoadState.Ready -> if (visible.isEmpty()) {
                     CenterMessage(stringResource(R.string.no_channels))
                 } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(visible.size, key = { visible[it].key }) { index ->
                             val channel = visible[index]
                             ChannelRow(
@@ -178,6 +190,7 @@ fun ChannelsScreen(
                                 isFavorite = channel.key in model.favorites,
                                 onClick = { onPlay(visible, index) },
                                 onLongClick = { model.toggleFavorite(channel) },
+                                modifier = if (index == returnIndex) Modifier.focusRequester(channelFocus) else Modifier,
                             )
                         }
                     }
@@ -210,10 +223,18 @@ private fun CategoryRow(label: String, count: Int, selected: Boolean, onFocused:
 }
 
 @Composable
-private fun ChannelRow(channel: Channel, now: Long, tmdbKey: String, isFavorite: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun ChannelRow(
+    channel: Channel,
+    now: Long,
+    tmdbKey: String,
+    isFavorite: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var focused by remember { mutableStateOf(false) }
     val secondary = if (focused) Color.Black.copy(alpha = 0.6f) else Palette.TextSecondary
-    FocusCard(onClick = onClick, onLongClick = onLongClick, modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }) {
+    FocusCard(onClick = onClick, onLongClick = onLongClick, modifier = modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }) {
         Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             ChannelLogo(channel)
             Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
