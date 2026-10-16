@@ -54,6 +54,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import app.livechannels.SpeechTap
+import app.livechannels.SubtitleController
 import kotlinx.coroutines.launch
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -71,6 +72,7 @@ import app.livechannels.Channel
 import app.livechannels.Engine
 import app.livechannels.R
 import app.livechannels.Sessions
+import app.livechannels.clearCache
 import kotlin.coroutines.resume
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation

@@ -7,6 +7,8 @@ plugins {
 // Live Channels: a small TV app with only the Ace Stream channels, played through the Ace Stream
 // engine installed on the device. A standalone app with its own id.
 android {
+    // Engine, catalogue, lists and subtitles, shared with the PC app.
+    sourceSets["main"].java.srcDir("../shared/src")
     namespace = "app.livechannels"
     compileSdk = 36
 

@@ -1,0 +1,85 @@
+name: Live Channels Windows
+
+# The PC version of Live Channels (folder desktop/): an installer EXE with VLC inside.
+on:
+  push:
+    branches:
+      - feat/acestream-iptv
+    paths:
+      - "desktop/**"
+      - "shared/**"
+      - "acetv/src/main/res/values/strings.xml"
+      - "acetv/src/main/res/values-iw/strings.xml"
+      - ".github/workflows/live-channels-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: live-channels-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: VLC for the player
+        run: |
+          set -e
+          VLC=3.0.21
+          curl -fsSL -o vlc.zip "https://get.videolan.org/vlc/$VLC/win64/vlc-$VLC-win64.zip"
+          7z x -y -ovlc-unpacked vlc.zip > /dev/null
+          SRC="vlc-unpacked/vlc-$VLC"
+          DEST=desktop/resources/windows/vlc
+          mkdir -p "$DEST"
+          cp "$SRC/libvlc.dll" "$SRC/libvlccore.dll" "$DEST/"
+          cp -r "$SRC/plugins" "$DEST/"
+          # Parts a player drawing into the app's own window does not use.
+          rm -rf "$DEST/plugins/gui" "$DEST/plugins/lua" "$DEST/plugins/visualization" "$DEST/plugins/control"
+          du -sh "$DEST"
+
+      - name: Build installer
+        env:
+          APP_VERSION: 1.0.${{ github.run_number }}
+        run: |
+          set -o pipefail
+          ./gradlew -p desktop packageExe --stacktrace 2>&1 | tee build.log || {
+            # Compiler and build errors as annotations, readable without the full log.
+            { grep -E "^e: " build.log | sed -E 's#^e: file:///[^ ]*/(desktop/src/main/kotlin|shared/src)/##'
+              awk '/What went wrong/{n=4} n>0{print; n--}' build.log | grep -v "What went wrong"
+              grep -iE "Execution failed|jpackage|wix" build.log; } \
+              | grep -v "^> Task" | head -9 | while IFS= read -r line; do
+              echo "::error::${line:0:600}"
+            done
+            exit 1
+          }
+
+      - name: Publish installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          mkdir -p dist
+          cp "$(ls desktop/build/compose/binaries/main/exe/*.exe | head -1)" dist/LiveChannels-Setup.exe
+          ls -la dist
+          TAG=live-channels-windows-latest
+          gh release delete "$TAG" --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+          gh release create "$TAG" dist/LiveChannels-Setup.exe -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Live Channels for Windows (latest build)" \
+            --notes "Installer for Windows. Build of ${GITHUB_SHA::7}. Needs Ace Stream for Windows installed on the computer."
