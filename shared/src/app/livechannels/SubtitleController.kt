@@ -15,6 +15,19 @@ interface SubtitleSettings {
     var autoSubtitles: Boolean
 }
 
+/** A sound or subtitle track the broadcast itself carries, for choosing in the panel. */
+data class SourceTrack(val id: String, val label: String, val selected: Boolean)
+
+/** What the automatic sync last did, for the panel to say in the viewer's language. */
+sealed interface SyncNote {
+    /** Still listening: [seconds] of sound heard of the [needed]. */
+    data class Listening(val seconds: Int, val needed: Int) : SyncNote
+    /** No sound reaches the sync at all. */
+    data object NoSound : SyncNote
+    data class Synced(val confidence: Int, val offsetMs: Long) : SyncNote
+    data class NoClearMatch(val confidence: Int, val speechShare: Int) : SyncNote
+}
+
 /** Where the automatic sync hears the sound: each app's player. */
 interface SpeechSource {
     fun speech(): List<Pair<Long, Boolean>>
@@ -29,6 +42,11 @@ interface SpeechSource {
  * where the broadcast starts late or runs ads.
  */
 class SubtitleController(private val scope: CoroutineScope, private val prefs: SubtitleSettings) {
+    private companion object {
+        /** With a guide, the film is looked for this far either side of where it is thought to be. */
+        const val SEARCH_MS = 20 * 60_000L
+    }
+
     enum class Status { Idle, NoGuide, Searching, NoMatch, NoSubs, Choose, Loading, Ready, Failed }
 
     var status by mutableStateOf(Status.Idle)
@@ -49,7 +67,13 @@ class SubtitleController(private val scope: CoroutineScope, private val prefs: S
     var error by mutableStateOf<String?>(null)
         private set
     /** What the automatic sync last did, shown in the panel. */
-    var syncNote by mutableStateOf<String?>(null)
+    var syncNote by mutableStateOf<SyncNote?>(null)
+        private set
+    /** The film's start is unknown (no guide: the viewer named the film), so the sync looks through all of it. */
+    var startUnknown by mutableStateOf(false)
+        private set
+    /** Whether the automatic sync has matched this file yet. */
+    var synced by mutableStateOf(false)
         private set
     var lastAutoSyncMs = 0L
         private set
@@ -66,6 +90,8 @@ class SubtitleController(private val scope: CoroutineScope, private val prefs: S
         offsetMs = 0
         error = null
         syncNote = null
+        synced = false
+        startUnknown = false
         lastAutoSyncMs = 0
         status = if (programme == null) Status.NoGuide else Status.Idle
         // Once chosen, subtitles follow the viewer from programme to programme.
@@ -95,6 +121,26 @@ class SubtitleController(private val scope: CoroutineScope, private val prefs: S
         }
     }
 
+    /**
+     * The viewer names the film (a channel without a guide, or a guide that names it wrongly):
+     * it is matched by that name, and the sync finds where in the film the broadcast is.
+     */
+    fun searchByName(name: String) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return
+        val now = System.currentTimeMillis()
+        programme = Programme(clean, now, now + 4 * 60 * 60_000L)
+        startUnknown = true
+        title = null
+        options = emptyList()
+        selected = null
+        cues = emptyList()
+        offsetMs = 0
+        synced = false
+        syncNote = null
+        search()
+    }
+
     fun choose(option: SubtitleOption) {
         job?.cancel()
         job = scope.launch { loadOption(option) }
@@ -105,6 +151,8 @@ class SubtitleController(private val scope: CoroutineScope, private val prefs: S
         status = Status.Loading
         selected = option
         error = null
+        synced = false
+        syncNote = null
         try {
             cues = Subtitles.load(option.url)
             status = if (cues.isEmpty()) Status.Failed else Status.Ready
@@ -129,26 +177,53 @@ class SubtitleController(private val scope: CoroutineScope, private val prefs: S
     /** Where in the film the broadcast is now. */
     fun positionMs(nowMs: Long): Long = nowMs - (programme?.startMs ?: nowMs) + offsetMs
 
-    /** Lines the subtitles up with the speech the tap heard; applied only when the match is clear. */
-    suspend fun autoSync(tap: SpeechSource) {
+    /** Lines the subtitles up with the speech heard; applied only when the match is clear. */
+    suspend fun autoSync(source: SpeechSource) {
         val start = programme?.startMs ?: return
         if (cues.isEmpty()) return
-        val speech = tap.speech()
-        val heard = tap.secondsHeard()
+        if (!source.hearsSound) {
+            syncNote = SyncNote.NoSound
+            return
+        }
+        val heard = source.secondsHeard()
+        if (heard < AutoSync.MIN_SECONDS) {
+            syncNote = SyncNote.Listening(heard, AutoSync.MIN_SECONDS)
+            return
+        }
+        val speech = source.speech()
         val share = if (speech.isEmpty()) 0 else speech.count { it.second } * 100 / speech.size
-        val diagnostic = if (!tap.hearsSound) "no sound reaches the sync (format not supported)"
-        else "heard ${heard}s, speech $share%"
+        // With the guide, the film started near the programme's start; without it, anywhere.
+        val range = if (startUnknown) {
+            val sinceStart = System.currentTimeMillis() - start
+            (-sinceStart - 5 * 60_000L)..(cues.maxOf { it.endMs })
+        } else {
+            (offsetMs - SEARCH_MS)..(offsetMs + SEARCH_MS)
+        }
         val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-            AutoSync.align(speech, cues, start, offsetMs)
+            AutoSync.align(speech, cues, start, range)
         }
         lastAutoSyncMs = System.currentTimeMillis()
-        syncNote = when {
-            result == null -> "auto: not enough to match yet ($diagnostic)"
-            result.confidence >= 0.35f -> {
-                offsetMs = result.offsetMs
-                "auto: synced (${(result.confidence * 100).toInt()}%) · $diagnostic"
-            }
-            else -> "auto: no clear match (${(result.confidence * 100).toInt()}%) · $diagnostic"
+        val confidence = ((result?.confidence ?: 0f) * 100).toInt()
+        syncNote = if (result != null && result.confidence >= AutoSync.TRUSTED) {
+            offsetMs = result.offsetMs
+            synced = true
+            // Found once: later checks only follow small drifts (ads), around this point.
+            startUnknown = false
+            SyncNote.Synced(confidence, result.offsetMs)
+        } else {
+            SyncNote.NoClearMatch(confidence, share)
+        }
+    }
+
+    /**
+     * Keeps the subtitles in sync while a file is shown: tries every 20 seconds until the first
+     * clear match, then checks every 3 minutes (ads and breaks move the film).
+     */
+    suspend fun runAutoSync(source: SpeechSource) {
+        if (cues.isEmpty()) return
+        while (true) {
+            autoSync(source)
+            kotlinx.coroutines.delay(if (synced) 180_000L else 20_000L)
         }
     }
 

@@ -23,6 +23,13 @@ class SpeechDetector {
     private var hpAlpha = 0.0
     private var lpAlpha = 0.0
 
+    /**
+     * How far ahead of the speakers the sound is heard here (the player's sound buffer), so
+     * speech is stamped when the viewer hears it.
+     */
+    @Volatile
+    var latencyMs = 0L
+
     fun configure(sampleRate: Int) {
         val rate = sampleRate.coerceAtLeast(8_000)
         frameSamples = rate / 10
@@ -49,7 +56,7 @@ class SpeechDetector {
         if (++count >= frameSamples) {
             val rms = sqrt(sumSquares / count)
             synchronized(frames) {
-                frames.addLast(Frame(System.currentTimeMillis(), (20 * log10(max(rms, 1.0))).toFloat()))
+                frames.addLast(Frame(System.currentTimeMillis() + latencyMs, (20 * log10(max(rms, 1.0))).toFloat()))
                 while (frames.size > MAX_FRAMES) frames.removeFirst()
             }
             sumSquares = 0.0
@@ -85,47 +92,76 @@ class SpeechDetector {
 
 /**
  * Finds the subtitle shift that best lines the subtitles up with the speech heard: for each
- * candidate shift, how often a line is on screen while someone speaks, against lines on screen
- * in silence. Coarse (1 s) over ±[rangeMs], then fine (100 ms) around the best.
+ * candidate shift, how closely "a line is on screen" follows "someone speaks" over everything
+ * heard (a correlation, so lines shown in silence and speech with no line both count against
+ * it). Coarse over the whole [range], then fine (100 ms) around the best; the match counts only
+ * when it stands far above every other shift.
  */
 object AutoSync {
+    /** Sound needed before a match is tried. */
+    const val MIN_SECONDS = 40
+
     class Result(val offsetMs: Long, val confidence: Float)
 
     fun align(
         speech: List<Pair<Long, Boolean>>,
         cues: List<Cue>,
         programmeStartMs: Long,
-        currentOffsetMs: Long,
-        rangeMs: Long = 10 * 60_000L,
+        range: LongRange,
     ): Result? {
-        if (speech.size < 600 || cues.size < 10) return null
+        if (speech.size < MIN_SECONDS * 10 || cues.size < 10) return null
         val speaking = BooleanArray(speech.size) { speech[it].second }
-        val times = LongArray(speech.size) { speech[it].first - programmeStartMs }
-        val speechShare = speaking.count { it }.toFloat() / speaking.size
-        if (speechShare < 0.05f || speechShare > 0.95f) return null
-
-        fun score(offset: Long): Float {
-            var hit = 0
-            var miss = 0
-            for (i in times.indices) {
-                val shown = Subtitles.cueAt(cues, times[i] + offset) != null
-                if (shown) {
-                    if (speaking[i]) hit++ else miss++
-                }
-            }
-            val total = hit + miss
-            return if (total < 50) Float.NEGATIVE_INFINITY else (hit - miss * speechShare / (1 - speechShare)) / total
+        val speakingCount = speaking.count { it }
+        if (speakingCount < speech.size / 20 || speakingCount > speech.size * 19 / 20) return null
+        // Where the film is at each moment heard, before any shift (in 100 ms steps).
+        val base = LongArray(speech.size) { (speech[it].first - programmeStartMs) / STEP_MS }
+        // Whether a line is on screen, for every 100 ms of the film.
+        val filmSteps = (cues.maxOf { it.endMs } / STEP_MS + 1).toInt()
+        val shown = BooleanArray(filmSteps)
+        for (cue in cues) {
+            val from = (cue.startMs / STEP_MS).toInt().coerceIn(0, filmSteps)
+            val to = (cue.endMs / STEP_MS).toInt().coerceIn(0, filmSteps)
+            for (i in from until to) shown[i] = true
         }
 
-        val coarse = ((currentOffsetMs - rangeMs)..(currentOffsetMs + rangeMs) step 1_000L).map { it to score(it) }
-        val (bestCoarse, bestCoarseScore) = coarse.maxByOrNull { it.second } ?: return null
-        if (bestCoarseScore == Float.NEGATIVE_INFINITY) return null
-        val fine = ((bestCoarse - 1_000L)..(bestCoarse + 1_000L) step 100L).map { it to score(it) }
+        fun score(offsetMs: Long): Double {
+            val shift = offsetMs / STEP_MS
+            var both = 0
+            var shownCount = 0
+            for (i in base.indices) {
+                val at = base[i] + shift
+                if (at < 0 || at >= filmSteps || !shown[at.toInt()]) continue
+                shownCount++
+                if (speaking[i]) both++
+            }
+            if (shownCount < 50) return Double.NaN
+            // Phi correlation of "line on screen" and "speech".
+            val n = speech.size.toDouble()
+            val a = both.toDouble()
+            val b = (shownCount - both).toDouble()
+            val c = (speakingCount - both).toDouble()
+            val d = n - a - b - c
+            val denominator = Math.sqrt((a + b) * (c + d) * (a + c) * (b + d))
+            return if (denominator <= 0) Double.NaN else (a * d - b * c) / denominator
+        }
+
+        val step = if (range.last - range.first > 60 * 60_000L) 2_000L else 1_000L
+        val coarse = (range.first..range.last step step).map { it to score(it) }.filter { !it.second.isNaN() }
+        if (coarse.size < 10) return null
+        val (bestCoarse, _) = coarse.maxBy { it.second }
+        val fine = ((bestCoarse - step)..(bestCoarse + step) step STEP_MS).map { it to score(it) }.filter { !it.second.isNaN() }
         val (best, bestScore) = fine.maxByOrNull { it.second } ?: return null
-        // How far the best stands out from the typical shift: a clear peak is a real match.
-        val scores = coarse.map { it.second }.filter { it.isFinite() }.sorted()
-        val median = scores[scores.size / 2]
-        val spread = (scores.last() - scores.first()).coerceAtLeast(1e-3f)
-        return Result(best, ((bestScore - median) / spread).coerceIn(0f, 1f))
+        // How far the best stands out: shifts more than 3 s away from it, as a spread.
+        val others = coarse.filter { kotlin.math.abs(it.first - best) > 3_000 }.map { it.second }
+        if (others.isEmpty()) return null
+        val mean = others.average()
+        val deviation = Math.sqrt(others.sumOf { (it - mean) * (it - mean) } / others.size).coerceAtLeast(1e-4)
+        val standing = (bestScore - mean) / deviation
+        return Result(best, (standing / 8.0).toFloat().coerceIn(0f, 1f))
     }
+
+    /** A match this clear moves the subtitles. */
+    const val TRUSTED = 0.5f
+
+    private const val STEP_MS = 100L
 }

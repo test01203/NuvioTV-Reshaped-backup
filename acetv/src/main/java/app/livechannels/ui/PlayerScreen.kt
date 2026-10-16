@@ -55,6 +55,9 @@ import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import app.livechannels.SpeechTap
 import app.livechannels.SubtitleController
+import app.livechannels.SourceTrack
+import androidx.media3.common.C
+import androidx.media3.common.Tracks
 import kotlinx.coroutines.launch
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -139,6 +142,9 @@ private fun buildPlayer(context: Context, tap: SpeechTap): ExoPlayer {
         // English sound where the broadcast carries it; otherwise its own.
         trackSelectionParameters = trackSelectionParameters.buildUpon()
             .setPreferredAudioLanguages("en", "eng")
+            // Hebrew subtitles the broadcast carries are shown by themselves.
+            .setPreferredTextLanguages("he", "iw", "heb")
+            .setSelectUndeterminedTextLanguage(false)
             .build()
     }
 }
@@ -212,15 +218,23 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
     val programme = channel.programmeAt(now)
     LaunchedEffect(index, programme?.startMs) { subtitles.reset(programme) }
     // Automatic sync: once 90 s of sound were heard, then every 3 minutes (ads move the film).
-    LaunchedEffect(subtitles.cues) {
-        if (subtitles.cues.isEmpty()) return@LaunchedEffect
-        while (true) {
-            if (tap.secondsHeard() >= 90) subtitles.autoSync(tap)
-            delay(if (subtitles.lastAutoSyncMs == 0L) 10_000 else 180_000)
+    LaunchedEffect(subtitles.cues) { subtitles.runAutoSync(tap) }
+    // The broadcast's own sound and subtitle tracks, for the panel.
+    var audioTracks by remember { mutableStateOf(emptyList<SourceTrack>()) }
+    var textTracks by remember { mutableStateOf(emptyList<SourceTrack>()) }
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onTracksChanged(tracks: Tracks) {
+                audioTracks = player.sourceTracks(C.TRACK_TYPE_AUDIO)
+                textTracks = player.sourceTracks(C.TRACK_TYPE_TEXT)
+            }
         }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
     }
 
     LaunchedEffect(index) {
+        tap.clear()
         model.lastChannelKey = list[index].key
         reopenings = 0
     }
@@ -231,7 +245,6 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
         startedAt = System.currentTimeMillis()
         infoUntil = startedAt + 6_000
         player.stop()
-        tap.clear()
         // The previous channel's sessions are closed before the next one opens.
         withContext(NonCancellable) { Sessions.stopAll() }
         val engine = model.prefs.engineUrl
@@ -345,7 +358,15 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
         if (System.currentTimeMillis() < infoUntil || phase != Phase.Playing) {
             InfoBar(channel, index + 1, now, tmdbKey, Modifier.align(Alignment.TopStart).padding(36.dp))
         }
-        if (panelOpen) SubtitlePanel(subtitles, tmdbKey, onAutoSync = { scope.launch { subtitles.autoSync(tap) } })
+        if (panelOpen) SubtitlePanel(
+            controller = subtitles,
+            tmdbKey = tmdbKey,
+            onAutoSync = { scope.launch { subtitles.autoSync(tap) } },
+            audioTracks = audioTracks,
+            textTracks = textTracks,
+            onAudio = { player.selectTrack(C.TRACK_TYPE_AUDIO, it) },
+            onText = { player.selectTrack(C.TRACK_TYPE_TEXT, it) },
+        )
         LaunchedEffect(infoUntil) {
             delay((infoUntil - System.currentTimeMillis()).coerceAtLeast(0))
             infoUntil = 0
@@ -507,4 +528,29 @@ private fun LoadingMeter(
         Text(parts.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = Palette.TextSecondary)
         Sessions.lastAnswer?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Palette.TextTertiary, maxLines = 1) }
     }
+}
+
+/** The tracks of [type] the stream carries, "group:track" as their id. */
+private fun ExoPlayer.sourceTracks(type: Int): List<SourceTrack> =
+    currentTracks.groups.withIndex().filter { it.value.type == type }.flatMap { (groupIndex, group) ->
+        (0 until group.length).filter { group.isTrackSupported(it) }.map { track ->
+            val format = group.getTrackFormat(track)
+            val language = format.language?.takeIf { it != "und" }?.let { java.util.Locale(it).displayLanguage }
+            val label = listOfNotNull(format.label, language).distinct().joinToString(" · ").ifBlank { "${groupIndex + 1}" }
+            SourceTrack("$groupIndex:$track", label, group.isTrackSelected(track))
+        }
+    }
+
+/** Plays the track with [id] (from [sourceTracks]); null turns tracks of [type] off. */
+private fun ExoPlayer.selectTrack(type: Int, id: String?) {
+    val parameters = trackSelectionParameters.buildUpon()
+    if (id == null) {
+        parameters.setTrackTypeDisabled(type, true)
+    } else {
+        val (groupIndex, track) = id.split(':').map { it.toInt() }
+        val group = currentTracks.groups.getOrNull(groupIndex) ?: return
+        parameters.setTrackTypeDisabled(type, false)
+            .setOverrideForType(androidx.media3.common.TrackSelectionOverride(group.mediaTrackGroup, track))
+    }
+    trackSelectionParameters = parameters.build()
 }

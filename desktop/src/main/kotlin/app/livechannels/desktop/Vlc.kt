@@ -80,7 +80,11 @@ class VlcPlayer : SpeechSource {
         "--no-osd",
     )
     private val player: EmbeddedMediaPlayer = factory.mediaPlayers().newEmbeddedMediaPlayer()
-    private val detector = SpeechDetector().apply { configure(SAMPLE_RATE) }
+    // The sound is heard here a fifth of a second before the speakers play it (their buffer).
+    private val detector = SpeechDetector().apply {
+        configure(SAMPLE_RATE)
+        latencyMs = 200
+    }
 
     // Video: one frame kept, drawn on the next redraw.
     private val lock = Any()
@@ -145,13 +149,14 @@ class VlcPlayer : SpeechSource {
     fun play(url: String) {
         firstFrameAt = 0L
         lastDataAt = System.currentTimeMillis()
-        detector.clear()
         state = State.Opening
         player.submit {
             player.media().play(
                 url,
                 ":network-caching=3000",
                 ":audio-language=eng,en",
+                // Hebrew subtitles the broadcast carries are shown by themselves.
+                ":sub-language=heb,he,iw,hebrew",
                 ":http-reconnect",
             )
         }
@@ -191,6 +196,32 @@ class VlcPlayer : SpeechSource {
                 filterQuality = FilterQuality.Medium,
             )
         }
+    }
+
+    /** A new channel: the sound heard so far belongs to the last one. */
+    fun clearSpeech() = detector.clear()
+
+    /** The sound tracks the broadcast carries. */
+    fun audioTracks(): List<app.livechannels.SourceTrack> = runCatching {
+        val current = player.audio().track()
+        player.audio().trackDescriptions().filter { it.id() >= 0 }
+            .map { app.livechannels.SourceTrack(it.id().toString(), it.description(), it.id() == current) }
+    }.getOrDefault(emptyList())
+
+    /** The subtitle tracks the broadcast carries (DVB, teletext, text). */
+    fun subtitleTracks(): List<app.livechannels.SourceTrack> = runCatching {
+        val current = player.subpictures().track()
+        player.subpictures().trackDescriptions().filter { it.id() >= 0 }
+            .map { app.livechannels.SourceTrack(it.id().toString(), it.description(), it.id() == current) }
+    }.getOrDefault(emptyList())
+
+    fun selectAudio(id: String) {
+        player.submit { player.audio().setTrack(id.toInt()) }
+    }
+
+    /** A broadcast subtitle track, or none for null. */
+    fun selectSubtitle(id: String?) {
+        player.submit { player.subpictures().setTrack(id?.toInt() ?: -1) }
     }
 
     override fun speech(): List<Pair<Long, Boolean>> = detector.speech()

@@ -38,6 +38,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import app.livechannels.Cue
 import app.livechannels.SubtitleController
+import app.livechannels.SourceTrack
+import app.livechannels.SyncNote
+import androidx.compose.ui.platform.LocalContext
 import app.livechannels.HebrewTitles
 import app.livechannels.Prefs
 import app.livechannels.Programme
@@ -83,7 +86,19 @@ fun BoxScope.SubtitleLine(controller: SubtitleController) {
 
 /** The subtitles panel: matching, the choice of file, and the sync controls. */
 @Composable
-fun BoxScope.SubtitlePanel(controller: SubtitleController, tmdbKey: String, onAutoSync: () -> Unit) {
+fun BoxScope.SubtitlePanel(
+    controller: SubtitleController,
+    tmdbKey: String,
+    onAutoSync: () -> Unit,
+    audioTracks: List<SourceTrack>,
+    textTracks: List<SourceTrack>,
+    onAudio: (String) -> Unit,
+    onText: (String?) -> Unit,
+) {
+    val context = LocalContext.current
+    val nameTitle = stringResource(R.string.subs_name_title)
+    val saveText = stringResource(R.string.subs_search)
+    val cancelText = stringResource(R.string.cancel)
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     Column(
@@ -126,7 +141,7 @@ fun BoxScope.SubtitlePanel(controller: SubtitleController, tmdbKey: String, onAu
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 PillButton(stringResource(R.string.subs_auto_sync), onAutoSync)
-                controller.syncNote?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Palette.TextTertiary,
+                controller.syncNote?.let { Text(syncText(it), style = MaterialTheme.typography.labelSmall, color = Palette.TextTertiary,
                     modifier = Modifier.align(Alignment.CenterVertically)) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -136,10 +151,32 @@ fun BoxScope.SubtitlePanel(controller: SubtitleController, tmdbKey: String, onAu
         }
 
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // Without a guide (or with a wrong one), the viewer names the film.
+            if (namePrompt(controller)) {
+                item(key = "name") {
+                    OptionRow(nameTitle, null, false,
+                        onClick = { askText(context, nameTitle, "", android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS, saveText, cancelText, controller::searchByName) },
+                        modifier = if (controller.cues.isEmpty()) Modifier.focusRequester(focus) else Modifier)
+                }
+            }
+            if (audioTracks.size > 1) {
+                item(key = "audio-title") { Text(stringResource(R.string.source_audio), style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary) }
+                items(audioTracks, key = { "a:" + it.id }) { track ->
+                    OptionRow(track.label, null, track.selected, onClick = { onAudio(track.id) })
+                }
+            }
+            if (textTracks.isNotEmpty()) {
+                item(key = "text-title") { Text(stringResource(R.string.source_subs), style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary) }
+                item(key = "text-off") { OptionRow(stringResource(R.string.source_subs_off), null, textTracks.none { it.selected }, onClick = { onText(null) }) }
+                items(textTracks, key = { "t:" + it.id }) { track ->
+                    OptionRow(track.label, null, track.selected, onClick = { onText(track.id) })
+                }
+                item(key = "hebrew-title") { Text(stringResource(R.string.subs_title), style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary) }
+            }
             item(key = "off") {
                 OptionRow(stringResource(R.string.subs_off), null, controller.selected == null,
                     onClick = controller::off,
-                    modifier = if (controller.cues.isEmpty()) Modifier.focusRequester(focus) else Modifier)
+                    modifier = if (controller.cues.isEmpty() && !namePrompt(controller)) Modifier.focusRequester(focus) else Modifier)
             }
             if (controller.status == SubtitleController.Status.Idle || controller.status == SubtitleController.Status.Failed ||
                 controller.status == SubtitleController.Status.NoMatch || controller.status == SubtitleController.Status.NoSubs
@@ -161,4 +198,18 @@ private fun OptionRow(title: String, source: String?, selected: Boolean, onClick
             source?.let { Text(it, style = MaterialTheme.typography.labelSmall, maxLines = 1) }
         }
     }
+}
+
+/** Whether the panel offers to search by the film's name. */
+private fun namePrompt(controller: SubtitleController): Boolean =
+    controller.status == SubtitleController.Status.NoGuide || controller.status == SubtitleController.Status.NoMatch ||
+        controller.status == SubtitleController.Status.NoSubs || controller.startUnknown
+
+/** What the automatic sync last did, in the viewer's language. */
+@Composable
+private fun syncText(note: SyncNote): String = when (note) {
+    is SyncNote.Listening -> stringResource(R.string.subs_sync_listening, note.seconds, note.needed)
+    SyncNote.NoSound -> stringResource(R.string.subs_sync_no_sound)
+    is SyncNote.Synced -> stringResource(R.string.subs_sync_done, note.confidence)
+    is SyncNote.NoClearMatch -> stringResource(R.string.subs_sync_unclear, note.confidence)
 }

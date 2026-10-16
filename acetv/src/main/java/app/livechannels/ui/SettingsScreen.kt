@@ -124,35 +124,7 @@ private fun SettingField(title: String, value: String, inputType: Int, onDone: (
     val saveText = stringResource(R.string.save)
     val cancelText = stringResource(R.string.cancel)
     FocusCard(
-        onClick = {
-            val input = EditText(context).apply {
-                setText(value)
-                setSelection(text.length)
-                isSingleLine = true
-                this.inputType = InputType.TYPE_CLASS_TEXT or inputType
-                imeOptions = EditorInfo.IME_ACTION_DONE
-            }
-            val dialog = AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle(title)
-                .setView(FrameLayout(context).apply {
-                    val side = (20 * resources.displayMetrics.density).toInt()
-                    setPadding(side, side / 2, side, 0)
-                    addView(input)
-                })
-                .setPositiveButton(saveText) { _, _ -> onDone(input.text.toString().trim()) }
-                .setNegativeButton(cancelText, null)
-                .create()
-            input.setOnEditorActionListener { _, action, _ ->
-                if (action == EditorInfo.IME_ACTION_DONE) {
-                    onDone(input.text.toString().trim())
-                    dialog.dismiss()
-                    true
-                } else false
-            }
-            dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
-            dialog.show()
-            input.requestFocus()
-        },
+        onClick = { askText(context, title, value, inputType, saveText, cancelText, onDone) },
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
@@ -182,4 +154,46 @@ private fun ToggleRow(title: String, description: String, checked: Boolean, onTo
             )
         }
     }
+}
+
+/**
+ * Asks for a line of text in a system dialog, which brings up the TV's keyboard (a text field
+ * inside the screen often never does).
+ */
+fun askText(
+    context: android.content.Context,
+    title: String,
+    value: String,
+    inputType: Int,
+    saveText: String,
+    cancelText: String,
+    onDone: (String) -> Unit,
+) {
+    val input = EditText(context).apply {
+        setText(value)
+        setSelection(text.length)
+        isSingleLine = true
+        this.inputType = InputType.TYPE_CLASS_TEXT or inputType
+        imeOptions = EditorInfo.IME_ACTION_DONE
+    }
+    val dialog = AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        .setTitle(title)
+        .setView(FrameLayout(context).apply {
+            val side = (20 * resources.displayMetrics.density).toInt()
+            setPadding(side, side / 2, side, 0)
+            addView(input)
+        })
+        .setPositiveButton(saveText) { _, _ -> onDone(input.text.toString().trim()) }
+        .setNegativeButton(cancelText, null)
+        .create()
+    input.setOnEditorActionListener { _, action, _ ->
+        if (action == EditorInfo.IME_ACTION_DONE) {
+            onDone(input.text.toString().trim())
+            dialog.dismiss()
+            true
+        } else false
+    }
+    dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+    dialog.show()
+    input.requestFocus()
 }

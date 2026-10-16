@@ -124,14 +124,9 @@ fun PlayerScreen(
     val programme = channel.programmeAt(now)
     LaunchedEffect(index, programme?.startMs) { subtitles.reset(programme) }
     // Automatic sync: once 90 s of sound were heard, then every 3 minutes (ads move the film).
-    LaunchedEffect(subtitles.cues) {
-        if (subtitles.cues.isEmpty()) return@LaunchedEffect
-        while (true) {
-            if (player.secondsHeard() >= 90) subtitles.autoSync(player)
-            delay(if (subtitles.lastAutoSyncMs == 0L) 10_000 else 180_000)
-        }
-    }
+    LaunchedEffect(subtitles.cues) { subtitles.runAutoSync(player) }
     LaunchedEffect(index) {
+        player.clearSpeech()
         model.lastChannelKey = list[index].key
         reopenings = 0
     }
@@ -230,6 +225,11 @@ fun PlayerScreen(
     // Every key reaches the player, wherever the mouse is.
     val keys: (KeyEvent) -> Boolean = keys@{ event ->
         if (event.type != KeyEventType.KeyDown) return@keys false
+        // With the panel open, keys type in its film-name box; Esc closes it.
+        if (panelOpen) {
+            if (event.key == Key.Escape) panelOpen = false
+            return@keys event.key == Key.Escape
+        }
         when (event.key) {
             Key.Escape, Key.Backspace -> {
                 when {
@@ -258,13 +258,7 @@ fun PlayerScreen(
                 if (phase == Phase.Failed) attempt++ else infoUntil = System.currentTimeMillis() + 6_000
                 true
             }
-            else -> {
-                // In the panel, 1 to 9 choose a subtitle file.
-                val digit = event.key.keyCode.toInt() - Key.One.keyCode.toInt()
-                val option = if (panelOpen && digit in 0..8) subtitles.options.getOrNull(digit) else null
-                if (option != null) subtitles.choose(option)
-                option != null
-            }
+            else -> false
         }
     }
     SideEffect { Keys.handler = keys }
@@ -311,7 +305,7 @@ fun PlayerScreen(
             Text(Strings["player_keys"], style = MaterialTheme.typography.labelSmall, color = Palette.TextTertiary,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp))
         }
-        if (panelOpen) SubtitlePanel(subtitles, tmdbKey, onAutoSync = { scope.launch { subtitles.autoSync(player) } }, onClose = { panelOpen = false })
+        if (panelOpen) SubtitlePanel(subtitles, player, tmdbKey, onAutoSync = { scope.launch { subtitles.autoSync(player) } }, onClose = { panelOpen = false })
 
         when (phase) {
             Phase.Connecting, Phase.Buffering -> LoadingMeter(
@@ -500,7 +494,18 @@ private fun BoxScope.SubtitleLine(controller: SubtitleController) {
 
 /** The subtitles panel: matching, the choice of file, and the sync controls. */
 @Composable
-private fun BoxScope.SubtitlePanel(controller: SubtitleController, tmdbKey: String, onAutoSync: () -> Unit, onClose: () -> Unit) {
+private fun BoxScope.SubtitlePanel(controller: SubtitleController, player: VlcPlayer, tmdbKey: String, onAutoSync: () -> Unit, onClose: () -> Unit) {
+    // The broadcast's own tracks, read again while the panel is open (they appear as the stream plays).
+    var audioTracks by remember { mutableStateOf(player.audioTracks()) }
+    var subtitleTracks by remember { mutableStateOf(player.subtitleTracks()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            audioTracks = player.audioTracks()
+            subtitleTracks = player.subtitleTracks()
+            delay(1_500)
+        }
+    }
+    var filmName by remember { mutableStateOf("") }
     Column(
         Modifier
             .align(Alignment.CenterEnd)
@@ -534,6 +539,31 @@ private fun BoxScope.SubtitlePanel(controller: SubtitleController, tmdbKey: Stri
         statusText?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Palette.Amber) }
         controller.error?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Palette.TextTertiary, maxLines = 2) }
 
+        // Without a guide (or with a wrong one), the viewer names the film.
+        if (controller.status == SubtitleController.Status.NoGuide || controller.status == SubtitleController.Status.NoMatch ||
+            controller.status == SubtitleController.Status.NoSubs || controller.startUnknown
+        ) {
+            Text(Strings["subs_name_title"], style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = filmName,
+                    onValueChange = { filmName = it },
+                    singleLine = true,
+                    placeholder = { Text(Strings["subs_name_hint"], color = Palette.TextTertiary) },
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Palette.TextPrimary,
+                        unfocusedTextColor = Palette.TextPrimary,
+                        focusedBorderColor = Palette.TextSecondary,
+                        unfocusedBorderColor = Palette.TextTertiary,
+                        cursorColor = Palette.TextPrimary,
+                    ),
+                    modifier = Modifier.weight(1f),
+                )
+                PillButton("⌕", { controller.searchByName(filmName) })
+            }
+        }
+
         if (controller.cues.isNotEmpty()) {
             Text(Strings["subs_offset", controller.offsetMs / 1000.0], style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -544,7 +574,7 @@ private fun BoxScope.SubtitlePanel(controller: SubtitleController, tmdbKey: Stri
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 PillButton(Strings["subs_auto_sync"], onAutoSync)
-                controller.syncNote?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Palette.TextTertiary) }
+                controller.syncNote?.let { Text(syncText(it), style = MaterialTheme.typography.labelSmall, color = Palette.TextTertiary) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 PillButton(Strings["subs_next_now"], { controller.nextLineNow(System.currentTimeMillis()) })
@@ -553,6 +583,22 @@ private fun BoxScope.SubtitlePanel(controller: SubtitleController, tmdbKey: Stri
         }
 
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (audioTracks.size > 1) {
+                item(key = "audio-title") { Text(Strings["source_audio"], style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary) }
+                items(audioTracks, key = { "a:" + it.id }) { track ->
+                    OptionRow(track.label, null, track.selected, onClick = { player.selectAudio(track.id) })
+                }
+            }
+            if (subtitleTracks.isNotEmpty()) {
+                item(key = "spu-title") { Text(Strings["source_subs"], style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary) }
+                item(key = "spu-off") {
+                    OptionRow(Strings["source_subs_off"], null, subtitleTracks.none { it.selected }, onClick = { player.selectSubtitle(null) })
+                }
+                items(subtitleTracks, key = { "s:" + it.id }) { track ->
+                    OptionRow(track.label, null, track.selected, onClick = { player.selectSubtitle(track.id) })
+                }
+                item(key = "hebrew-title") { Text(Strings["subs_title"], style = MaterialTheme.typography.labelMedium, color = Palette.TextSecondary) }
+            }
             item(key = "off") { OptionRow(Strings["subs_off"], null, controller.selected == null, onClick = controller::off) }
             if (controller.status == SubtitleController.Status.Idle || controller.status == SubtitleController.Status.Failed ||
                 controller.status == SubtitleController.Status.NoMatch || controller.status == SubtitleController.Status.NoSubs
@@ -561,8 +607,7 @@ private fun BoxScope.SubtitlePanel(controller: SubtitleController, tmdbKey: Stri
             }
             items(controller.options.size, key = { controller.options[it].url }) { i ->
                 val option: SubtitleOption = controller.options[i]
-                val number = if (i < 9) "${i + 1}. " else ""
-                OptionRow(number + option.label, option.source, controller.selected == option, onClick = { controller.choose(option) })
+                OptionRow(option.label, option.source, controller.selected == option, onClick = { controller.choose(option) })
             }
         }
     }
@@ -576,4 +621,12 @@ private fun OptionRow(title: String, source: String?, selected: Boolean, onClick
             source?.let { Text(it, style = MaterialTheme.typography.labelSmall, maxLines = 1) }
         }
     }
+}
+
+/** What the automatic sync last did, in the viewer's language. */
+fun syncText(note: app.livechannels.SyncNote): String = when (note) {
+    is app.livechannels.SyncNote.Listening -> Strings["subs_sync_listening", note.seconds, note.needed]
+    app.livechannels.SyncNote.NoSound -> Strings["subs_sync_no_sound"]
+    is app.livechannels.SyncNote.Synced -> Strings["subs_sync_done", note.confidence]
+    is app.livechannels.SyncNote.NoClearMatch -> Strings["subs_sync_unclear", note.confidence]
 }

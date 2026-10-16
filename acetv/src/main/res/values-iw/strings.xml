@@ -52,7 +52,7 @@
     <string name="cat_other">אחר</string>
     <string name="subs_title">כתוביות בעברית</string>
     <string name="subs_matched">זוהה: %1$s</string>
-    <string name="subs_no_guide">אין מדריך שידורים לערוץ הזה, אז אי אפשר לזהות את הסרט.</string>
+    <string name="subs_no_guide">אין מדריך שידורים לערוץ הזה. כתבו את שם הסרט כדי למצוא לו כתוביות.</string>
     <string name="subs_searching">מחפש…</string>
     <string name="subs_no_match">לא נמצא סרט שמתאים לתוכנית.</string>
     <string name="subs_no_match_key">לא זוהה. הוסיפו מפתח TMDB בהגדרות כדי לזהות שמות ברוסית.</string>
@@ -76,4 +76,13 @@
     <string name="playlist_loaded">הרשימה שלכם: נטענו %1$d ערוצים</string>
     <string name="playlist_failed">הרשימה שלכם לא נטענה: %1$s</string>
     <string name="playlist_empty">הרשימה נטענה אבל אין בה ערוצים</string>
+    <string name="subs_sync_listening">סנכרון אוטומטי: מאזין… %1$d מתוך %2$d שניות</string>
+    <string name="subs_sync_no_sound">הסנכרון האוטומטי לא שומע את הקול של הערוץ</string>
+    <string name="subs_sync_done">מסונכרן אוטומטית (%1$d%%)</string>
+    <string name="subs_sync_unclear">עדיין אין התאמה ברורה (%1$d%%) – מנסה שוב עוד רגע</string>
+    <string name="subs_name_title">חיפוש לפי שם הסרט</string>
+    <string name="subs_name_hint">שם הסרט (עברית, אנגלית או רוסית)</string>
+    <string name="source_audio">שפת הקול מהשידור</string>
+    <string name="source_subs">כתוביות מהשידור</string>
+    <string name="source_subs_off">בלי כתוביות מהשידור</string>
 </resources>

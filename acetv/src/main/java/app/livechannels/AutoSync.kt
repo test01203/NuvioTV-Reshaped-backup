@@ -14,7 +14,8 @@ import java.nio.ByteOrder
  */
 @OptIn(UnstableApi::class)
 class SpeechTap : BaseAudioProcessor(), SpeechSource {
-    private val detector = SpeechDetector()
+    // The sound passes here about a third of a second before the TV plays it (its buffer).
+    private val detector = SpeechDetector().apply { latencyMs = 300 }
     private var channels = 2
     private var floatInput = false
 
@@ -44,10 +45,6 @@ class SpeechTap : BaseAudioProcessor(), SpeechSource {
             detector.feed(mono / channels)
         }
         replaceOutputBuffer(size).put(inputBuffer).flip()
-    }
-
-    override fun onReset() {
-        clear()
     }
 
     fun clear() = detector.clear()

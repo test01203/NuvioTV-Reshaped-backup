@@ -52,7 +52,7 @@
     <string name="cat_other">Other</string>
     <string name="subs_title">Hebrew subtitles</string>
     <string name="subs_matched">Matched: %1$s</string>
-    <string name="subs_no_guide">No programme guide for this channel, so the film cannot be identified.</string>
+    <string name="subs_no_guide">This channel has no guide. Type the film\'s name to find its subtitles.</string>
     <string name="subs_searching">Searching…</string>
     <string name="subs_no_match">The programme could not be matched to a film.</string>
     <string name="subs_no_match_key">Not matched. Add a TMDB key in Settings to match guide titles in Russian.</string>
@@ -76,4 +76,13 @@
     <string name="playlist_loaded">Your list: %1$d channels loaded</string>
     <string name="playlist_failed">Your list did not load: %1$s</string>
     <string name="playlist_empty">Your list loaded but has no channels in it</string>
+    <string name="subs_sync_listening">Auto sync: listening… %1$d of %2$d seconds</string>
+    <string name="subs_sync_no_sound">Auto sync cannot hear this channel\'s sound</string>
+    <string name="subs_sync_done">Synced automatically (%1$d%%)</string>
+    <string name="subs_sync_unclear">No clear match yet (%1$d%%) – trying again shortly</string>
+    <string name="subs_name_title">Search by film name</string>
+    <string name="subs_name_hint">Film name (Hebrew, English or Russian)</string>
+    <string name="source_audio">Sound from the broadcast</string>
+    <string name="source_subs">Subtitles from the broadcast</string>
+    <string name="source_subs_off">No broadcast subtitles</string>
 </resources>
