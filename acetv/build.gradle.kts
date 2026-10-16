@@ -72,6 +72,9 @@ dependencies {
     implementation(libs.coroutines.android)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
+    // FFmpeg sound decoders (AC3, E-AC3, DTS…), the same build the main app ships.
+    implementation(files("../app/libs/lib-decoder-ffmpeg-release.aar"))
+    implementation(libs.media3.decoder)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.okhttp)

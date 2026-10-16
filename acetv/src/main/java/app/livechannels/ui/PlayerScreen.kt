@@ -89,6 +89,14 @@ private const val NO_PEER_GIVE_UP_MS = 25_000L
 private const val PLAYER_WAIT_MS = 30_000L
 /** With the engine already streaming, a stream that shows no picture this long is reloaded once. */
 private const val RELOAD_AFTER_MS = 20_000L
+/** Picture frozen in buffering this long counts as a dropped stream. */
+private const val STALL_MS = 20_000L
+/** Reloads in a row that did not bring the picture back before the engine session is renewed. */
+private const val MAX_RELOADS = 3
+/** Engine sessions renewed automatically for one channel before it shows as failed. */
+private const val MAX_REOPENINGS = 3
+/** After the engine has peers, the player waits for the engine's prebuffer at most this long. */
+private const val PREBUFFER_WAIT_MS = 10_000L
 
 @OptIn(UnstableApi::class)
 private fun buildPlayer(context: Context, tap: SpeechTap): ExoPlayer {
@@ -111,13 +119,21 @@ private fun buildPlayer(context: Context, tap: SpeechTap): ExoPlayer {
         .build()
     // The sound passes through the speech tap (for subtitle sync), decoded to PCM even where the
     // TV could take it encoded, since the tap only hears PCM.
-    val renderers = object : DefaultRenderersFactory(context) {
+    fun renderers(extensions: Int) = object : DefaultRenderersFactory(context) {
         override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
             DefaultAudioSink.Builder(context)
                 .setAudioProcessors(arrayOf<AudioProcessor>(tap))
                 .build()
+    }.apply {
+        // Sound the TV cannot decode itself (AC3, E-AC3, DTS on many sports channels) goes to
+        // the bundled FFmpeg decoder; a decoder that fails falls back to the next one.
+        setExtensionRendererMode(extensions)
+        setEnableDecoderFallback(true)
     }
-    return ExoPlayer.Builder(context, renderers).setMediaSourceFactory(sources).setLoadControl(loadControl).build().apply {
+    fun build(extensions: Int) = ExoPlayer.Builder(context, renderers(extensions)).setMediaSourceFactory(sources).setLoadControl(loadControl).build()
+    val player = runCatching { build(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON) }
+        .getOrElse { build(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF) }
+    return player.apply {
         // English sound where the broadcast carries it; otherwise its own.
         trackSelectionParameters = trackSelectionParameters.buildUpon()
             .setPreferredAudioLanguages("en", "eng")
@@ -177,6 +193,7 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
 
     var index by remember { mutableIntStateOf(startIndex) }
     var attempt by remember { mutableIntStateOf(0) }
+    var reopenings by remember { mutableIntStateOf(0) }
     val channel = list[index]
     var phase by remember { mutableStateOf(Phase.Connecting) }
     var stats by remember { mutableStateOf<Sessions.Stats?>(null) }
@@ -201,7 +218,10 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
         }
     }
 
-    LaunchedEffect(index) { model.lastChannelKey = list[index].key }
+    LaunchedEffect(index) {
+        model.lastChannelKey = list[index].key
+        reopenings = 0
+    }
     LaunchedEffect(index, attempt) {
         phase = Phase.Connecting
         stats = null
@@ -250,8 +270,15 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
                 }
                 if (playing) {
                     phase = Phase.Playing
-                    // Holds the session open until the channel changes or the player closes.
-                    awaitCancellation()
+                    // Holds the session open until the channel changes or the player closes,
+                    // reloading the stream whenever it drops or stalls.
+                    player.keepAlive(item) { recovering -> phase = if (recovering) Phase.Buffering else Phase.Playing }
+                    if (reopenings < MAX_REOPENINGS) {
+                        // Reloading no longer helps: a new engine session for the same channel.
+                        reopenings++
+                        attempt++
+                        awaitCancellation()
+                    }
                 }
                 player.stop()
                 Sessions.stop(session)
@@ -346,19 +373,58 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
 }
 
 /**
+ * Returns only when the stream cannot be brought back: after an error, an end (the engine closed
+ * the connection) or a long stall, the same stream is loaded again, a few times in a row.
+ * Runs on the main thread, as the player requires.
+ */
+private suspend fun ExoPlayer.keepAlive(item: MediaItem, onRecovering: (Boolean) -> Unit) {
+    var reloads = 0
+    var bufferingSince = 0L
+    while (true) {
+        delay(1_000)
+        val now = System.currentTimeMillis()
+        bufferingSince = if (playbackState == Player.STATE_BUFFERING) bufferingSince.takeIf { it > 0 } ?: now else 0L
+        val dropped = playerError != null || playbackState == Player.STATE_ENDED || playbackState == Player.STATE_IDLE ||
+            (bufferingSince > 0 && now - bufferingSince >= STALL_MS)
+        if (!dropped) continue
+        onRecovering(true)
+        var back = false
+        while (!back && reloads < MAX_RELOADS) {
+            reloads++
+            delay(1_000L * reloads)
+            stop()
+            setMediaItem(item)
+            prepare()
+            playWhenReady = true
+            back = awaitPlaying(RELOAD_AFTER_MS)
+        }
+        if (!back) return
+        onRecovering(false)
+        reloads = 0
+        bufferingSince = 0L
+    }
+}
+
+/**
  * Follows the session until the engine streams. False when it found no peer at all within
  * [NO_PEER_GIVE_UP_MS], so the next stream can be tried.
  */
 private suspend fun waitForStream(session: Sessions.Session, onStats: (Sessions.Stats) -> Unit): Boolean {
     val started = System.currentTimeMillis()
+    var firstPeerAt = 0L
     while (true) {
         val elapsed = System.currentTimeMillis() - started
         Sessions.stats(session)?.let { stats ->
             onStats(stats)
-            // The first peer is enough: the player starts on the first data and keeps loading.
-            if (stats.peers > 0 || stats.status == "dl") return true
+            // Like Ace's own player: start once the engine finished its prebuffer, so the player
+            // does not run dry right away; with peers but a slow prebuffer, start anyway.
+            if (stats.status == "dl") return true
+            if (stats.peers > 0) {
+                if (firstPeerAt == 0L) firstPeerAt = System.currentTimeMillis()
+                if (System.currentTimeMillis() - firstPeerAt >= PREBUFFER_WAIT_MS) return true
+            }
         }
-        if (elapsed >= NO_PEER_GIVE_UP_MS) return false
+        if (elapsed >= NO_PEER_GIVE_UP_MS && firstPeerAt == 0L) return false
         delay(500)
     }
 }
