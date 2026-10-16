@@ -125,26 +125,37 @@ private fun buildPlayer(context: Context, tap: SpeechTap): ExoPlayer {
     }
 }
 
-/** True once the player shows the stream (a picture, or sound for a radio), false on an error or timeout. */
-private suspend fun ExoPlayer.awaitPlaying(timeoutMs: Long = PLAYER_WAIT_MS): Boolean = withTimeoutOrNull(timeoutMs) {
-    suspendCancellableCoroutine { continuation ->
-        val listener = object : Player.Listener {
-            override fun onRenderedFirstFrame() {
-                if (continuation.isActive) continuation.resume(true)
-            }
+/**
+ * True once the player shows the stream (a picture, or sound for a radio), false on an error or
+ * timeout. The listener is removed in `finally`, on the caller's (main) thread: a timeout cancels
+ * from a background thread, and the player may only be touched on the main one.
+ */
+private suspend fun ExoPlayer.awaitPlaying(timeoutMs: Long = PLAYER_WAIT_MS): Boolean {
+    var listener: Player.Listener? = null
+    try {
+        return withTimeoutOrNull(timeoutMs) {
+            suspendCancellableCoroutine { continuation ->
+                val added = object : Player.Listener {
+                    override fun onRenderedFirstFrame() {
+                        if (continuation.isActive) continuation.resume(true)
+                    }
 
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (isPlaying && continuation.isActive) continuation.resume(true)
-            }
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        if (isPlaying && continuation.isActive) continuation.resume(true)
+                    }
 
-            override fun onPlayerError(error: PlaybackException) {
-                if (continuation.isActive) continuation.resume(false)
+                    override fun onPlayerError(error: PlaybackException) {
+                        if (continuation.isActive) continuation.resume(false)
+                    }
+                }
+                listener = added
+                addListener(added)
             }
-        }
-        addListener(listener)
-        continuation.invokeOnCancellation { removeListener(listener) }
+        } ?: false
+    } finally {
+        listener?.let(::removeListener)
     }
-} ?: false
+}
 
 @OptIn(UnstableApi::class)
 @Composable
