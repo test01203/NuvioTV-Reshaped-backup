@@ -227,7 +227,7 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
                 streamNo = i + 1
                 val last = i == hashes.lastIndex
                 val link = Sessions.streamUrl(engine, hash)
-                session = Sessions.open(link)
+                session = if (Sessions.isEngineLink(link)) Sessions.open(link) else null
                 val opened = session
                 if (opened != null && !waitForStream(opened) { stats = it } && !last) {
                     Sessions.stop(opened)

@@ -203,15 +203,18 @@ object Engine {
     }
 
     /** Opens [infohash] in Ace Stream's own player (Ace Player). False when no Ace Stream app took it. */
-    suspend fun openInAcePlayer(context: Context, engineUrl: String, infohash: String): Boolean {
+    suspend fun openInAcePlayer(context: Context, engineUrl: String, stream: String): Boolean {
+        if (stream.startsWith("url:")) return false
+        val infohash = stream.removePrefix("id:")
+        val contentParam = if (stream.startsWith("id:")) "content_id" else "infohash"
         val pkg = installedPackage(context) ?: return false
         val intents = buildList {
-            Sessions.open(Sessions.streamUrl(engineUrl, infohash))?.let { session ->
+            Sessions.open(Sessions.streamUrl(engineUrl, stream))?.let { session ->
                 add(Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse(session.playbackUrl), "video/*").setPackage(pkg))
             }
             add(
                 Intent("org.acestream.action.start_content")
-                    .setData(Uri.parse("acestream:?infohash=$infohash"))
+                    .setData(Uri.parse("acestream:?$contentParam=$infohash"))
                     .putExtra("org.acestream.EXTRA_SELECTED_PLAYER", "{\"type\": 3}"),
             )
         }
@@ -340,10 +343,20 @@ object Sessions {
     class Stats(val status: String, val peers: Int, val speedDownKbps: Int, val progress: Float?)
 
     /** The engine's direct MPEG-TS stream, as Ace Stream's own players use. */
-    fun streamUrl(engineUrl: String, infohash: String): String =
+    fun streamUrl(engineUrl: String, stream: String): String {
         // A player id of its own for every opening, so the engine never mixes this session up
         // with the previous channel's while that one is still closing.
-        "${engineUrl.trimEnd('/')}/ace/getstream?infohash=$infohash&pid=${java.util.UUID.randomUUID().toString().replace("-", "").take(16)}"
+        val pid = java.util.UUID.randomUUID().toString().replace("-", "").take(16)
+        val base = engineUrl.trimEnd('/')
+        return when {
+            stream.startsWith("url:") -> stream.removePrefix("url:")
+            stream.startsWith("id:") -> "$base/ace/getstream?id=${stream.removePrefix("id:")}&pid=$pid"
+            else -> "$base/ace/getstream?infohash=$stream&pid=$pid"
+        }
+    }
+
+    /** Whether [link] is served by the engine (and so opens as an engine session). */
+    fun isEngineLink(link: String): Boolean = "/ace/getstream" in link
 
     /** Every session this app opened and has not closed yet. */
     private val active = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
@@ -482,6 +495,11 @@ class Prefs(context: Context) {
     var autoSubtitles: Boolean
         get() = prefs.getBoolean("auto_subtitles", false)
         set(value) = prefs.edit().putBoolean("auto_subtitles", value).apply()
+
+    /** A channel list (M3U) the viewer added by its address; empty for none. */
+    var playlistUrl: String
+        get() = prefs.getString("playlist_url", null).orEmpty()
+        set(value) = prefs.edit().putString("playlist_url", value.trim()).apply()
 
     var lastCategory: String?
         get() = prefs.getString("last_category", null)

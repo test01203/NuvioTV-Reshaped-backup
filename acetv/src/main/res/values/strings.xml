@@ -68,4 +68,7 @@
     <string name="setting_tmdb">TMDB key (for subtitles and Hebrew titles)</string>
     <string name="setting_tmdb_desc">A free key from themoviedb.org (Settings → API). It stays on this device and matches the guide\'s titles to films.</string>
     <string name="subs_auto_sync">Auto sync now</string>
+    <string name="cat_playlist">My list</string>
+    <string name="setting_playlist">My channel list (M3U address)</string>
+    <string name="setting_playlist_desc">Optional: the address of an M3U list of your own. It is read on this device and listed with the catalogue.</string>
 </resources>

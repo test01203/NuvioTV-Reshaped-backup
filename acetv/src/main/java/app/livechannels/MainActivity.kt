@@ -72,16 +72,23 @@ class AppModel(context: Context) {
 
     suspend fun load(context: Context) {
         loadState = LoadState.Loading
+        // The viewer's own list, when set, is listed whether or not the catalogue loads.
+        val listed = prefs.playlistUrl.takeIf { it.startsWith("http") }?.let { url ->
+            runCatching { Playlist.load(url) }.onFailure { if (it is CancellationException) throw it }.getOrDefault(emptyList())
+        }.orEmpty()
         loadState = try {
             Engine.ensureRunning(context, prefs.engineUrl)
-            channels = Catalog.load(prefs.engineUrl)
+            channels = Catalog.load(prefs.engineUrl) + listed
             LoadState.Ready
         } catch (cancel: CancellationException) {
             throw cancel
-        } catch (error: AceException) {
-            LoadState.Failed(error.reason)
-        } catch (_: Exception) {
-            LoadState.Failed(AceException.Reason.CatalogFailed)
+        } catch (error: Exception) {
+            if (listed.isNotEmpty()) {
+                channels = listed
+                LoadState.Ready
+            } else {
+                LoadState.Failed((error as? AceException)?.reason ?: AceException.Reason.CatalogFailed)
+            }
         }
     }
 

@@ -41,6 +41,7 @@ fun SettingsScreen(model: AppModel, onBack: () -> Unit, onEngineChanged: () -> U
     var acePlayer by remember { mutableStateOf(model.prefs.acePlayer) }
     var hideOffline by remember { mutableStateOf(model.hideOffline) }
     var tmdbKey by remember { mutableStateOf(model.prefs.tmdbKey) }
+    var playlistUrl by remember { mutableStateOf(model.prefs.playlistUrl) }
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
 
@@ -94,9 +95,20 @@ fun SettingsScreen(model: AppModel, onBack: () -> Unit, onEngineChanged: () -> U
             modifier = Modifier.padding(top = 8.dp))
         Text(stringResource(R.string.setting_tmdb_desc), style = MaterialTheme.typography.bodySmall, color = Palette.TextSecondary)
         SettingField(tmdbKey, { tmdbKey = it }, KeyboardType.Ascii) { model.prefs.tmdbKey = tmdbKey }
+        Text(stringResource(R.string.setting_playlist), style = MaterialTheme.typography.bodyLarge, color = Palette.TextPrimary,
+            modifier = Modifier.padding(top = 8.dp))
+        Text(stringResource(R.string.setting_playlist_desc), style = MaterialTheme.typography.bodySmall, color = Palette.TextSecondary)
+        SettingField(playlistUrl, { playlistUrl = it }, KeyboardType.Uri) {
+            model.prefs.playlistUrl = playlistUrl
+            onEngineChanged()
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 8.dp)) {
             PillButton(stringResource(R.string.save), {
                 model.prefs.tmdbKey = tmdbKey
+                if (playlistUrl.trim() != model.prefs.playlistUrl) {
+                    model.prefs.playlistUrl = playlistUrl
+                    onEngineChanged()
+                }
                 if (engine.trim().trimEnd('/') != model.prefs.engineUrl) {
                     model.prefs.engineUrl = engine
                     onEngineChanged()

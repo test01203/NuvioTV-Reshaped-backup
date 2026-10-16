@@ -68,6 +68,7 @@ private val CATEGORY_LABELS = mapOf(
     "series" to R.string.cat_series,
     "regional" to R.string.cat_regional,
     "other" to R.string.cat_other,
+    "playlist" to R.string.cat_playlist,
 )
 
 @Composable
