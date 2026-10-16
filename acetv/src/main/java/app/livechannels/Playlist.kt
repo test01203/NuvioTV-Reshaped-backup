@@ -10,7 +10,11 @@ object Playlist {
     /** The category of entries the list gives none. */
     const val DEFAULT_CATEGORY = "playlist"
 
-    suspend fun load(url: String): List<Channel> = parse(Http.text(url, readTimeoutMs = 30_000))
+    suspend fun load(url: String): List<Channel> =
+        // A single channel link pasted instead of a list's address is that one channel (fetching
+        // it would download the video stream itself).
+        if ("/ace/getstream" in url || url.startsWith("acestream://", ignoreCase = true)) parse(url)
+        else parse(Http.text(url, readTimeoutMs = 30_000))
 
     internal fun parse(text: String): List<Channel> {
         val channels = ArrayList<Channel>()
