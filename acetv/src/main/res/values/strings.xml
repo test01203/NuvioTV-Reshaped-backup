@@ -71,4 +71,9 @@
     <string name="cat_playlist">My list</string>
     <string name="setting_playlist">My channel list (M3U address)</string>
     <string name="setting_playlist_desc">Optional: the address of an M3U list of your own. It is read on this device and listed with the catalogue.</string>
+    <string name="cancel">Cancel</string>
+    <string name="field_empty">Not set – press OK to type</string>
+    <string name="playlist_loaded">Your list: %1$d channels loaded</string>
+    <string name="playlist_failed">Your list did not load: %1$s</string>
+    <string name="playlist_empty">Your list loaded but has no channels in it</string>
 </resources>

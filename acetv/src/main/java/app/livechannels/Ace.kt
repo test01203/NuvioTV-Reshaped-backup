@@ -62,18 +62,30 @@ class AceException(val reason: Reason) : Exception(reason.name) {
 
 internal object Http {
     suspend fun text(url: String, readTimeoutMs: Int = 20_000): String = withContext(Dispatchers.IO) {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        connection.connectTimeout = 5_000
-        connection.readTimeout = readTimeoutMs
-        try {
-            val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) throw IllegalStateException("HTTP $code: ${body.take(120)}")
-            body
-        } finally {
-            connection.disconnect()
+        var address = url
+        // Redirects followed by hand, so short links that move between http and https work too.
+        repeat(5) {
+            val connection = URL(address).openConnection() as HttpURLConnection
+            connection.connectTimeout = 8_000
+            connection.readTimeout = readTimeoutMs
+            connection.instanceFollowRedirects = false
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) LiveChannels")
+            try {
+                val code = connection.responseCode
+                val location = connection.getHeaderField("Location")
+                if (code in 300..399 && location != null) {
+                    address = URL(URL(address), location).toString()
+                    return@repeat
+                }
+                val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+                val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                if (code !in 200..299) throw IllegalStateException("HTTP $code: ${body.take(120)}")
+                return@withContext body
+            } finally {
+                connection.disconnect()
+            }
         }
+        throw IllegalStateException("Too many redirects")
     }
 
     fun encode(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")

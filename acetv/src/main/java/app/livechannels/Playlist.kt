@@ -10,6 +10,36 @@ object Playlist {
     /** The category of entries the list gives none. */
     const val DEFAULT_CATEGORY = "playlist"
 
+    /** The address as typed, made loadable: spaces dropped, https:// added when no scheme is given. */
+    fun address(typed: String): String? {
+        val text = typed.trim().replace(" ", "")
+        return when {
+            text.isEmpty() -> null
+            text.startsWith("acestream://", ignoreCase = true) -> text
+            text.startsWith("http://", ignoreCase = true) || text.startsWith("https://", ignoreCase = true) -> text
+            "://" in text -> null
+            else -> "https://$text"
+        }
+    }
+
+    /**
+     * Seeds, health and programme guide for the list's channels from the catalogue, when a list
+     * entry is a stream the catalogue knows; the list's own name, logo and category stay.
+     */
+    fun enrich(listed: List<Channel>, catalogue: List<Channel>): List<Channel> {
+        val known = HashMap<String, Channel>()
+        for (channel in catalogue) for (hash in channel.infohashes) known.putIfAbsent(hash, channel)
+        return listed.map { entry ->
+            val match = known[entry.infohashes.first()] ?: return@map entry
+            entry.copy(
+                logo = entry.logo ?: match.logo,
+                health = match.health,
+                availability = match.availability,
+                programmes = match.programmes,
+            )
+        }
+    }
+
     suspend fun load(url: String): List<Channel> =
         // A single channel link pasted instead of a list's address is that one channel (fetching
         // it would download the video stream itself).

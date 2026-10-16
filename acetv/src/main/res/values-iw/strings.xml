@@ -71,4 +71,9 @@
     <string name="cat_playlist">הרשימה שלי</string>
     <string name="setting_playlist">רשימת ערוצים משלי (כתובת M3U)</string>
     <string name="setting_playlist_desc">אופציונלי: כתובת של רשימת M3U משלכם. היא נקראת במכשיר הזה ומוצגת יחד עם הקטלוג.</string>
+    <string name="cancel">ביטול</string>
+    <string name="field_empty">לא הוגדר – לחצו OK כדי להקליד</string>
+    <string name="playlist_loaded">הרשימה שלכם: נטענו %1$d ערוצים</string>
+    <string name="playlist_failed">הרשימה שלכם לא נטענה: %1$s</string>
+    <string name="playlist_empty">הרשימה נטענה אבל אין בה ערוצים</string>
 </resources>

@@ -1,7 +1,14 @@
 package app.livechannels.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import android.app.AlertDialog
+import android.text.InputType
+import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
+import android.widget.FrameLayout
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,10 +16,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -25,10 +28,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -45,7 +45,7 @@ fun SettingsScreen(model: AppModel, onBack: () -> Unit, onEngineChanged: () -> U
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
 
-    Column(Modifier.fillMaxSize().then(ScreenPadding).widthIn(max = 820.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).then(ScreenPadding).widthIn(max = 820.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineSmall, color = Palette.TextPrimary)
 
         ToggleRow(
@@ -72,72 +72,96 @@ fun SettingsScreen(model: AppModel, onBack: () -> Unit, onEngineChanged: () -> U
         Text(stringResource(R.string.setting_engine), style = MaterialTheme.typography.bodyLarge, color = Palette.TextPrimary,
             modifier = Modifier.padding(top = 8.dp))
         Text(stringResource(R.string.setting_engine_desc), style = MaterialTheme.typography.bodySmall, color = Palette.TextSecondary)
-        var fieldFocused by remember { mutableStateOf(false) }
-        BasicTextField(
-            value = engine,
-            onValueChange = { engine = it },
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = Palette.TextPrimary),
-            cursorBrush = SolidColor(Palette.TextPrimary),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = {
+        SettingField(stringResource(R.string.setting_engine), engine, InputType.TYPE_TEXT_VARIATION_URI) {
+            engine = it
+            if (engine.trim().trimEnd('/') != model.prefs.engineUrl) {
                 model.prefs.engineUrl = engine
                 onEngineChanged()
-            }),
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { fieldFocused = it.isFocused }
-                .background(Palette.Elevated, RoundedCornerShape(12.dp))
-                .border(2.dp, if (fieldFocused) Palette.TextPrimary else Color.Transparent, RoundedCornerShape(12.dp))
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-        )
+            }
+        }
         Text(stringResource(R.string.setting_tmdb), style = MaterialTheme.typography.bodyLarge, color = Palette.TextPrimary,
             modifier = Modifier.padding(top = 8.dp))
         Text(stringResource(R.string.setting_tmdb_desc), style = MaterialTheme.typography.bodySmall, color = Palette.TextSecondary)
-        SettingField(tmdbKey, { tmdbKey = it }, KeyboardType.Ascii) { model.prefs.tmdbKey = tmdbKey }
+        SettingField(stringResource(R.string.setting_tmdb), tmdbKey, InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD) {
+            tmdbKey = it
+            model.prefs.tmdbKey = tmdbKey
+        }
         Text(stringResource(R.string.setting_playlist), style = MaterialTheme.typography.bodyLarge, color = Palette.TextPrimary,
             modifier = Modifier.padding(top = 8.dp))
         Text(stringResource(R.string.setting_playlist_desc), style = MaterialTheme.typography.bodySmall, color = Palette.TextSecondary)
-        SettingField(playlistUrl, { playlistUrl = it }, KeyboardType.Uri) {
-            model.prefs.playlistUrl = playlistUrl
-            onEngineChanged()
+        SettingField(stringResource(R.string.setting_playlist), playlistUrl, InputType.TYPE_TEXT_VARIATION_URI) {
+            playlistUrl = it
+            if (playlistUrl.trim() != model.prefs.playlistUrl) {
+                model.prefs.playlistUrl = playlistUrl
+                onEngineChanged()
+            }
+        }
+        model.playlistStatus?.let { status ->
+            val count = status.getOrNull()
+            Text(
+                when {
+                    count == null -> stringResource(R.string.playlist_failed, status.exceptionOrNull()?.message ?: "?")
+                    count == 0 -> stringResource(R.string.playlist_empty)
+                    else -> stringResource(R.string.playlist_loaded, count)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (count != null && count > 0) Palette.Green else Palette.TextSecondary,
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 8.dp)) {
-            PillButton(stringResource(R.string.save), {
-                model.prefs.tmdbKey = tmdbKey
-                if (playlistUrl.trim() != model.prefs.playlistUrl) {
-                    model.prefs.playlistUrl = playlistUrl
-                    onEngineChanged()
-                }
-                if (engine.trim().trimEnd('/') != model.prefs.engineUrl) {
-                    model.prefs.engineUrl = engine
-                    onEngineChanged()
-                }
-                onBack()
-            })
             PillButton(stringResource(R.string.back), onBack)
         }
     }
 }
 
+/**
+ * A setting typed in a system dialog: on a TV, a text field inside the screen often never brings
+ * up the keyboard, while a dialog's text box always does (and takes a pasted address too).
+ */
 @Composable
-private fun SettingField(value: String, onChange: (String) -> Unit, keyboard: KeyboardType, onDone: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    BasicTextField(
-        value = value,
-        onValueChange = onChange,
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodyLarge.copy(color = Palette.TextPrimary),
-        cursorBrush = SolidColor(Palette.TextPrimary),
-        keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { onDone() }),
-        modifier = Modifier
-            .fillMaxWidth()
-            .onFocusChanged { focused = it.isFocused }
-            .background(Palette.Elevated, RoundedCornerShape(12.dp))
-            .border(2.dp, if (focused) Palette.TextPrimary else Color.Transparent, RoundedCornerShape(12.dp))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-    )
+private fun SettingField(title: String, value: String, inputType: Int, onDone: (String) -> Unit) {
+    val context = LocalContext.current
+    val saveText = stringResource(R.string.save)
+    val cancelText = stringResource(R.string.cancel)
+    FocusCard(
+        onClick = {
+            val input = EditText(context).apply {
+                setText(value)
+                setSelection(text.length)
+                isSingleLine = true
+                this.inputType = InputType.TYPE_CLASS_TEXT or inputType
+                imeOptions = EditorInfo.IME_ACTION_DONE
+            }
+            val dialog = AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle(title)
+                .setView(FrameLayout(context).apply {
+                    val side = (20 * resources.displayMetrics.density).toInt()
+                    setPadding(side, side / 2, side, 0)
+                    addView(input)
+                })
+                .setPositiveButton(saveText) { _, _ -> onDone(input.text.toString().trim()) }
+                .setNegativeButton(cancelText, null)
+                .create()
+            input.setOnEditorActionListener { _, action, _ ->
+                if (action == EditorInfo.IME_ACTION_DONE) {
+                    onDone(input.text.toString().trim())
+                    dialog.dismiss()
+                    true
+                } else false
+            }
+            dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+            dialog.show()
+            input.requestFocus()
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            value.ifBlank { stringResource(R.string.field_empty) },
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 2,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+        )
+    }
 }
 
 @Composable

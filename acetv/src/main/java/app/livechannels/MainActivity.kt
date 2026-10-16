@@ -70,15 +70,31 @@ class AppModel(context: Context) {
     val shownChannels: List<Channel>
         get() = if (hideOffline) channels.filter { it.health != Health.Offline } else channels
 
+    /** How the viewer's own list last loaded, for Settings: channel count, or why it failed. */
+    var playlistStatus by mutableStateOf<Result<Int>?>(null)
+
     suspend fun load(context: Context) {
         loadState = LoadState.Loading
         // The viewer's own list, when set, is listed whether or not the catalogue loads.
-        val listed = prefs.playlistUrl.takeIf { it.startsWith("http") || it.startsWith("acestream://", ignoreCase = true) }?.let { url ->
-            runCatching { Playlist.load(url) }.onFailure { if (it is CancellationException) throw it }.getOrDefault(emptyList())
-        }.orEmpty()
+        val address = Playlist.address(prefs.playlistUrl)
+        val listed = if (address == null) {
+            playlistStatus = null
+            emptyList()
+        } else {
+            try {
+                Playlist.load(address).also { playlistStatus = Result.success(it.size) }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                playlistStatus = Result.failure(error)
+                emptyList()
+            }
+        }
         loadState = try {
             Engine.ensureRunning(context, prefs.engineUrl)
-            channels = Catalog.load(prefs.engineUrl) + listed
+            val catalogue = Catalog.load(prefs.engineUrl)
+            // The viewer's list first: it is what they chose to add.
+            channels = Playlist.enrich(listed, catalogue) + catalogue
             LoadState.Ready
         } catch (cancel: CancellationException) {
             throw cancel
