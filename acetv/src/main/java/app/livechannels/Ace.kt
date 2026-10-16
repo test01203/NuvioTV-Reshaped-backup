@@ -363,6 +363,20 @@ object Sessions {
         commands.forEach { stopCommand(it) }
     }
 
+    /**
+     * Clears this app's cache after a channel: temporary files go, the logo cache stays (the
+     * list would otherwise load every logo again). The Ace Stream engine's own cache belongs to
+     * its app, which Android does not let other apps clear.
+     */
+    fun clearCache(context: Context) {
+        runCatching {
+            context.cacheDir.listFiles()?.forEach { file ->
+                if (file.name != "image_cache") file.deleteRecursively()
+            }
+            context.externalCacheDir?.listFiles()?.forEach { it.deleteRecursively() }
+        }
+    }
+
     /** Remembers the open sessions on disk, so a crash or a killed app does not leave them streaming. */
     fun persist(context: Context) {
         val open = synchronized(active) { active.toSet() }

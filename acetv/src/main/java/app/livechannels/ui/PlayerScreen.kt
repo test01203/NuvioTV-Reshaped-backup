@@ -155,7 +155,10 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
             player.stop()
             player.release()
             // Leaving the player closes every engine session, even after this screen is gone.
-            Sessions.appScope.launch { Sessions.stopAll() }
+            Sessions.appScope.launch {
+                Sessions.stopAll()
+                Sessions.clearCache(context.applicationContext)
+            }
         }
     }
 
