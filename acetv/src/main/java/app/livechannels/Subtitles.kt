@@ -117,7 +117,7 @@ object Subtitles {
             .replace(Regex("""(?i)(Х/ф|М/ф|Т/с|Д/ф|Д/с|М/с|фильм|сериал|премьера)\.?"""), " ")
             .replace(Regex("""\d{1,2}\+"""), " ")
             .replace(Regex("""(?i)\d+\s*-?\s*(я|й)?\s*(серия|сезон|часть)"""), " ")
-            .replace(Regex("""\(.*?\)|\[.*?]"""), " ")
+            .replace(Regex("""\(.*?\)|\[.*?\]"""), " ")
             .replace(Regex("""\b(19|20)\d{2}\b"""), " ")
             .substringBefore(" - ").substringBefore(" | ").substringBefore(": ")
             .replace(Regex("""\s+"""), " ")
@@ -259,7 +259,7 @@ object Subtitles {
             }
             val clean = body.toString()
                 .replace(Regex("""<[^>]+>"""), "")
-                .replace(Regex("""\{\\[^}]*}"""), "")
+                .replace(Regex("""\{\\[^}]*\}"""), "")
                 .trim()
             if (clean.isNotEmpty() && end > start) cues += Cue(start, end, clean)
         }
