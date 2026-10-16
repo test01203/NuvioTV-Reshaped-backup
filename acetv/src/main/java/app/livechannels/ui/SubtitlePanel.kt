@@ -161,17 +161,21 @@ class SubtitleController(private val scope: CoroutineScope, private val prefs: P
         val start = programme?.startMs ?: return
         if (cues.isEmpty()) return
         val speech = tap.speech()
+        val heard = tap.secondsHeard()
+        val share = if (speech.isEmpty()) 0 else speech.count { it.second } * 100 / speech.size
+        val diagnostic = if (tap.configuredEncoding == 0) "no sound reaches the sync (format not supported)"
+        else "heard ${heard}s, speech $share%"
         val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             app.livechannels.AutoSync.align(speech, cues, start, offsetMs)
         }
         lastAutoSyncMs = System.currentTimeMillis()
         syncNote = when {
-            result == null -> "auto: not enough speech heard yet"
+            result == null -> "auto: not enough to match yet ($diagnostic)"
             result.confidence >= 0.35f -> {
                 offsetMs = result.offsetMs
-                "auto: synced (%.0f%%)".format(result.confidence * 100)
+                "auto: synced (${(result.confidence * 100).toInt()}%) · $diagnostic"
             }
-            else -> "auto: no clear match (%.0f%%)".format(result.confidence * 100)
+            else -> "auto: no clear match (${(result.confidence * 100).toInt()}%) · $diagnostic"
         }
     }
 

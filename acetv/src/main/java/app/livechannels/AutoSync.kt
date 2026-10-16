@@ -34,8 +34,16 @@ class SpeechTap : BaseAudioProcessor() {
     private var hpAlpha = 0.0
     private var lpAlpha = 0.0
 
+    private var floatInput = false
+
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
+        // 16-bit PCM as most devices output it, or float PCM as some do; anything else passes untouched.
+        floatInput = when (inputAudioFormat.encoding) {
+            C.ENCODING_PCM_16BIT -> false
+            C.ENCODING_PCM_FLOAT -> true
+            else -> throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
+        }
+        configuredEncoding = inputAudioFormat.encoding
         channels = inputAudioFormat.channelCount.coerceAtLeast(1)
         sampleRate = inputAudioFormat.sampleRate.coerceAtLeast(8_000)
         frameSamples = sampleRate / 10
@@ -51,9 +59,12 @@ class SpeechTap : BaseAudioProcessor() {
         val size = inputBuffer.remaining()
         if (size == 0) return
         val samples = inputBuffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
-        while (samples.remaining() >= 2 * channels) {
+        val bytesPerSample = if (floatInput) 4 else 2
+        while (samples.remaining() >= bytesPerSample * channels) {
             var mono = 0.0
-            repeat(channels) { mono += samples.short.toDouble() }
+            repeat(channels) {
+                mono += if (floatInput) samples.float * 32_767.0 else samples.short.toDouble()
+            }
             mono /= channels
             val hp = hpAlpha * (hpPrevOut + mono - hpPrevIn)
             hpPrevIn = mono
@@ -85,17 +96,26 @@ class SpeechTap : BaseAudioProcessor() {
     fun speech(): List<Pair<Long, Boolean>> {
         val copy = synchronized(frames) { frames.toList() }
         if (copy.size < 50) return emptyList()
-        // The noise floor is the quiet end of what was heard; speech stands well above it.
-        val floor = copy.map { it.db }.sorted()[copy.size / 5]
-        return copy.map { it.wallMs to (it.db > floor + SPEECH_ABOVE_FLOOR_DB) }
+        // Between the quiet end of what was heard and its loud end, so a film with music under
+        // everything still splits into speech and pauses.
+        val sorted = copy.map { it.db }.sorted()
+        val floor = sorted[sorted.size / 5]
+        val loud = sorted[sorted.size * 9 / 10]
+        val threshold = maxOf(floor + MIN_ABOVE_FLOOR_DB, floor + (loud - floor) * 0.5f)
+        return copy.map { it.wallMs to (it.db > threshold) }
     }
+
+    /** The encoding the player hands the tap, for the panel's diagnostic line (0: nothing yet). */
+    @Volatile
+    var configuredEncoding = 0
+        private set
 
     fun secondsHeard(): Int = synchronized(frames) { frames.size } / 10
 
     companion object {
         /** Ten minutes of 100 ms frames. */
         private const val MAX_FRAMES = 6_000
-        private const val SPEECH_ABOVE_FLOOR_DB = 9f
+        private const val MIN_ABOVE_FLOOR_DB = 4f
     }
 }
 
