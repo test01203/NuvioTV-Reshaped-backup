@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -41,7 +42,8 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
@@ -225,6 +227,48 @@ fun PlayerScreen(
         if (subtitles.status == SubtitleController.Status.Idle) subtitles.search()
     }
 
+    // Every key reaches the player, wherever the mouse is.
+    val keys: (KeyEvent) -> Boolean = keys@{ event ->
+        if (event.type != KeyEventType.KeyDown) return@keys false
+        when (event.key) {
+            Key.Escape, Key.Backspace -> {
+                when {
+                    panelOpen -> panelOpen = false
+                    fullscreen -> onToggleFullscreen()
+                    else -> onExit()
+                }
+                true
+            }
+            Key.DirectionUp, Key.PageUp -> { zap(-1); true }
+            Key.DirectionDown, Key.PageDown -> { zap(1); true }
+            Key.S, Key.C, Key.DirectionLeft, Key.DirectionRight -> { if (panelOpen) panelOpen = false else openPanel(); true }
+            Key.F, Key.F11 -> { onToggleFullscreen(); true }
+            Key.M -> { player.muted = !player.muted; controlsUntil = System.currentTimeMillis() + 3_000; true }
+            Key.Plus, Key.Equals, Key.NumPadAdd -> { changeVolume(10); true }
+            Key.Minus, Key.NumPadSubtract -> { changeVolume(-10); true }
+            // Subtitle sync without the panel: [ and ] move by half a second (with Shift, 5 s),
+            // A syncs automatically, N and P put the next or previous line on now.
+            Key.LeftBracket -> { subtitles.nudge(if (event.isShiftPressed) -5_000 else -500); true }
+            Key.RightBracket -> { subtitles.nudge(if (event.isShiftPressed) 5_000 else 500); true }
+            Key.A -> { scope.launch { subtitles.autoSync(player) }; true }
+            Key.N -> { subtitles.nextLineNow(System.currentTimeMillis()); true }
+            Key.P -> { subtitles.previousLineNow(System.currentTimeMillis()); true }
+            Key.I, Key.Spacebar -> { infoUntil = System.currentTimeMillis() + 6_000; true }
+            Key.Enter, Key.NumPadEnter -> {
+                if (phase == Phase.Failed) attempt++ else infoUntil = System.currentTimeMillis() + 6_000
+                true
+            }
+            else -> {
+                // In the panel, 1 to 9 choose a subtitle file.
+                val digit = event.key.keyCode.toInt() - Key.One.keyCode.toInt()
+                val option = if (panelOpen && digit in 0..8) subtitles.options.getOrNull(digit) else null
+                if (option != null) subtitles.choose(option)
+                option != null
+            }
+        }
+    }
+    SideEffect { Keys.handler = keys }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -239,31 +283,6 @@ fun PlayerScreen(
                         if (panelOpen) panelOpen = false else infoUntil = System.currentTimeMillis() + 6_000
                     },
                 )
-            }
-            .onKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                when (event.key) {
-                    Key.Escape, Key.Backspace -> {
-                        when {
-                            panelOpen -> panelOpen = false
-                            fullscreen -> onToggleFullscreen()
-                            else -> onExit()
-                        }
-                        true
-                    }
-                    Key.DirectionUp, Key.PageUp -> { zap(-1); true }
-                    Key.DirectionDown, Key.PageDown -> { zap(1); true }
-                    Key.S, Key.C, Key.DirectionLeft, Key.DirectionRight -> { if (panelOpen) panelOpen = false else openPanel(); true }
-                    Key.F, Key.F11 -> { onToggleFullscreen(); true }
-                    Key.M -> { player.muted = !player.muted; controlsUntil = System.currentTimeMillis() + 3_000; true }
-                    Key.Plus, Key.Equals, Key.NumPadAdd -> { changeVolume(10); true }
-                    Key.Minus, Key.NumPadSubtract -> { changeVolume(-10); true }
-                    Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
-                        if (phase == Phase.Failed) attempt++ else infoUntil = System.currentTimeMillis() + 6_000
-                        true
-                    }
-                    else -> false
-                }
             },
     ) {
         Canvas(Modifier.fillMaxSize()) { player.draw(this) }
@@ -540,8 +559,10 @@ private fun BoxScope.SubtitlePanel(controller: SubtitleController, tmdbKey: Stri
             ) {
                 item(key = "search") { OptionRow(Strings["subs_search"], null, false, onClick = { controller.search() }) }
             }
-            items(controller.options, key = { it.url }) { option: SubtitleOption ->
-                OptionRow(option.label, option.source, controller.selected == option, onClick = { controller.choose(option) })
+            items(controller.options.size, key = { controller.options[it].url }) { i ->
+                val option: SubtitleOption = controller.options[i]
+                val number = if (i < 9) "${i + 1}. " else ""
+                OptionRow(number + option.label, option.source, controller.selected == option, onClick = { controller.choose(option) })
             }
         }
     }

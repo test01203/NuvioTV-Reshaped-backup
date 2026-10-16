@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -110,13 +111,15 @@ fun FocusCard(
     modifier: Modifier = Modifier,
     onRightClick: (() -> Unit)? = null,
     selected: Boolean = false,
+    /** Chosen with the keyboard: shown as if the mouse were over it. */
+    active: Boolean = false,
     shape: RoundedCornerShape = RoundedCornerShape(12.dp),
     content: @Composable BoxScope.(highlighted: Boolean) -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val focused by interaction.collectIsFocusedAsState()
-    val highlighted = hovered || focused
+    val highlighted = hovered || focused || active
     val background = when {
         highlighted -> Palette.TextPrimary
         selected -> Palette.Card
@@ -134,6 +137,8 @@ fun FocusCard(
             .clip(shape)
             .background(background)
             .hoverable(interaction)
+            // Clicks never take the keyboard away from the search box or the player.
+            .focusProperties { canFocus = false }
             .clickable(interactionSource = interaction, indication = null, onClick = onClick),
     ) {
         CompositionLocalProvider(LocalContentColor provides if (highlighted) Color.Black else Palette.TextPrimary) {
@@ -169,3 +174,12 @@ fun ProgressBar(progress: Float, modifier: Modifier = Modifier, height: Dp = 4.d
 }
 
 val ScreenPadding = Modifier.padding(horizontal = 40.dp, vertical = 28.dp)
+
+/**
+ * The keyboard, for the screen on show: the window hands every key here first, so arrows, Enter
+ * and Esc work wherever the mouse or the focus happens to be. A handler returns true for a key it
+ * used; other keys (letters in a text field) go on as usual.
+ */
+object Keys {
+    var handler: ((androidx.compose.ui.input.key.KeyEvent) -> Boolean)? = null
+}

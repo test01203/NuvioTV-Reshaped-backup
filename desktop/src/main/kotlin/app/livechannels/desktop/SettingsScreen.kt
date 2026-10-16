@@ -15,6 +15,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +50,17 @@ fun SettingsScreen(model: AppModel, onBack: () -> Unit, onReload: () -> Unit) {
         }
         if (reload) onReload()
     }
+
+    // Esc goes back, Enter saves; every other key types in the field.
+    val keys: (KeyEvent) -> Boolean = keys@{ event ->
+        if (event.type != KeyEventType.KeyDown) return@keys false
+        when (event.key) {
+            Key.Escape -> { onBack(); true }
+            Key.Enter, Key.NumPadEnter -> { save(); onBack(); true }
+            else -> false
+        }
+    }
+    SideEffect { Keys.handler = keys }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).then(ScreenPadding).widthIn(max = 820.dp),

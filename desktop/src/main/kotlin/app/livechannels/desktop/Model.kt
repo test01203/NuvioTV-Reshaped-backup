@@ -157,7 +157,7 @@ class AppModel {
         loadState = try {
             WindowsEngine.ensureRunning(prefs.engineUrl)
             val catalogue = Catalog.load(prefs.engineUrl)
-            channels = Playlist.enrich(listed, catalogue) + catalogue
+            channels = (Playlist.enrich(listed, catalogue) + catalogue).distinctBy { it.key }
             LoadState.Ready
         } catch (cancel: CancellationException) {
             throw cancel

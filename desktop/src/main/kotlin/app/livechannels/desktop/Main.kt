@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,7 +80,8 @@ fun main() {
                         if (windowState.placement == WindowPlacement.Fullscreen) WindowPlacement.Maximized else WindowPlacement.Fullscreen
                     true
                 } else {
-                    false
+                    // The screen on show gets every key first (see Keys).
+                    Keys.handler?.invoke(event) ?: false
                 }
             },
         ) {
@@ -128,6 +130,11 @@ private fun App(
             onReload = { scope.launch { model.load() } },
         )
         is Screen.Player -> if (player == null) {
+            SideEffect {
+                Keys.handler = { event ->
+                    (event.type == KeyEventType.KeyDown && event.key == Key.Escape).also { if (it) screen = Screen.Channels }
+                }
+            }
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(Strings["vlc_missing"], style = MaterialTheme.typography.bodyLarge, color = Palette.TextSecondary,
                     modifier = Modifier.padding(24.dp))
