@@ -22,10 +22,17 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    override fun onStop() {
+        super.onStop()
+        Sessions.persist(this)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         CrashLog.install(this)
+        // Sessions a previous run left open are closed first.
+        Sessions.appScope.launch { Sessions.stopAll(applicationContext) }
         val model = AppModel(this)
         val lastCrash = CrashLog.take(this)
         setContent {

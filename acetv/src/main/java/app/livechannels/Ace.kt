@@ -342,6 +342,38 @@ object Sessions {
     /** The engine's direct MPEG-TS stream, as Ace Stream's own players use. */
     fun streamUrl(engineUrl: String, infohash: String): String = "${engineUrl.trimEnd('/')}/ace/getstream?infohash=$infohash"
 
+    /** Every session this app opened and has not closed yet. */
+    private val active = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
+    private const val ACTIVE_PREFS = "live_channels_sessions"
+
+    /** Work that must finish even after the screen that started it is gone (closing sessions). */
+    val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Closes every session still open, this run's and any a previous run left behind (kept in
+     * [context]'s preferences), so the engine is never left streaming a channel nobody watches.
+     */
+    suspend fun stopAll(context: Context? = null) {
+        val commands = synchronized(active) { active.toList().also { active.clear() } }.toMutableSet()
+        context?.let { ctx ->
+            val prefs = ctx.getSharedPreferences(ACTIVE_PREFS, Context.MODE_PRIVATE)
+            commands += prefs.getStringSet("open", emptySet()).orEmpty()
+            prefs.edit().remove("open").apply()
+        }
+        commands.forEach { stopCommand(it) }
+    }
+
+    /** Remembers the open sessions on disk, so a crash or a killed app does not leave them streaming. */
+    fun persist(context: Context) {
+        val open = synchronized(active) { active.toSet() }
+        context.getSharedPreferences(ACTIVE_PREFS, Context.MODE_PRIVATE).edit().putStringSet("open", open).apply()
+    }
+
+    private suspend fun stopCommand(command: String) {
+        runCatching { Http.text(command + (if ('?' in command) "&" else "?") + "method=stop", readTimeoutMs = 3_000) }
+            .onFailure { if (it is CancellationException) throw it }
+    }
+
     /** Last answer of the engine, for the small line under the loading meter. */
     @Volatile
     var lastAnswer: String? = null
@@ -357,7 +389,11 @@ object Sessions {
             null
         } else {
             lastAnswer = null
-            Session(playback, stat, response.str("command_url"))
+            // Without a command link, the documented one is derived from the playback link
+            // (…/ace/r/<hash>/<session> → …/ace/cmd/<hash>/<session>), so the session can still be closed.
+            val command = response.str("command_url")
+                ?: Regex("""/ace/(r|m|l)/""").find(playback)?.let { playback.replaceRange(it.range, "/ace/cmd/").substringBefore('?').removeSuffix(".m3u8") }
+            Session(playback, stat, command).also { session -> session.commandUrl?.let(active::add) }
         }
     } catch (cancel: CancellationException) {
         throw cancel
@@ -389,8 +425,8 @@ object Sessions {
 
     suspend fun stop(session: Session?) {
         val command = session?.commandUrl ?: return
-        runCatching { Http.text(command + (if ('?' in command) "&" else "?") + "method=stop", readTimeoutMs = 3_000) }
-            .onFailure { if (it is CancellationException) throw it }
+        active.remove(command)
+        stopCommand(command)
     }
 }
 

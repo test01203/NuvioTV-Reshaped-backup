@@ -67,4 +67,5 @@
     <string name="subs_hint">◀ ▶  Subtitles</string>
     <string name="setting_tmdb">TMDB key (for subtitles and Hebrew titles)</string>
     <string name="setting_tmdb_desc">A free key from themoviedb.org (Settings → API). It stays on this device and matches the guide\'s titles to films.</string>
+    <string name="subs_auto_sync">Auto sync now</string>
 </resources>

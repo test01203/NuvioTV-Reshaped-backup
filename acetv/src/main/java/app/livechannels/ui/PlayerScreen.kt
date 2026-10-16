@@ -48,7 +48,13 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import app.livechannels.SpeechTap
+import kotlinx.coroutines.launch
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
@@ -83,7 +89,7 @@ private const val NO_PEER_GIVE_UP_MS = 25_000L
 private const val PLAYER_WAIT_MS = 60_000L
 
 @OptIn(UnstableApi::class)
-private fun buildPlayer(context: Context): ExoPlayer {
+private fun buildPlayer(context: Context, tap: SpeechTap): ExoPlayer {
     // Broadcast streams often send key frames without IDR flags: start on the first one.
     val extractors = DefaultExtractorsFactory().setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES)
     val http = DefaultHttpDataSource.Factory()
@@ -101,7 +107,15 @@ private fun buildPlayer(context: Context): ExoPlayer {
         .setBufferDurationsMs(15_000, 50_000, 1_000, 2_000)
         .setPrioritizeTimeOverSizeThresholds(true)
         .build()
-    return ExoPlayer.Builder(context).setMediaSourceFactory(sources).setLoadControl(loadControl).build().apply {
+    // The sound passes through the speech tap (for subtitle sync), decoded to PCM even where the
+    // TV could take it encoded, since the tap only hears PCM.
+    val renderers = object : DefaultRenderersFactory(context) {
+        override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
+            DefaultAudioSink.Builder(context)
+                .setAudioProcessors(arrayOf<AudioProcessor>(tap))
+                .build()
+    }
+    return ExoPlayer.Builder(context, renderers).setMediaSourceFactory(sources).setLoadControl(loadControl).build().apply {
         // English sound where the broadcast carries it; otherwise its own.
         trackSelectionParameters = trackSelectionParameters.buildUpon()
             .setPreferredAudioLanguages("en", "eng")
@@ -134,8 +148,16 @@ private suspend fun ExoPlayer.awaitPlaying(): Boolean = withTimeoutOrNull(PLAYER
 @Composable
 fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: () -> Unit) {
     val context = LocalContext.current
-    val player = remember { buildPlayer(context) }
-    DisposableEffect(Unit) { onDispose { player.release() } }
+    val tap = remember { SpeechTap() }
+    val player = remember { buildPlayer(context, tap) }
+    DisposableEffect(Unit) {
+        onDispose {
+            player.stop()
+            player.release()
+            // Leaving the player closes every engine session, even after this screen is gone.
+            Sessions.appScope.launch { Sessions.stopAll() }
+        }
+    }
 
     var index by remember { mutableIntStateOf(startIndex) }
     var attempt by remember { mutableIntStateOf(0) }
@@ -154,6 +176,14 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
     // Subtitles belong to a programme: a new channel or the next programme starts over.
     val programme = channel.programmeAt(now)
     LaunchedEffect(index, programme?.startMs) { subtitles.reset(programme) }
+    // Automatic sync: once 90 s of sound were heard, then every 3 minutes (ads move the film).
+    LaunchedEffect(subtitles.cues) {
+        if (subtitles.cues.isEmpty()) return@LaunchedEffect
+        while (true) {
+            if (tap.secondsHeard() >= 90) subtitles.autoSync(tap)
+            delay(if (subtitles.lastAutoSyncMs == 0L) 10_000 else 180_000)
+        }
+    }
 
     LaunchedEffect(index) { model.lastChannelKey = list[index].key }
     LaunchedEffect(index, attempt) {
@@ -163,6 +193,9 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
         startedAt = System.currentTimeMillis()
         infoUntil = startedAt + 6_000
         player.stop()
+        tap.clear()
+        // The previous channel's sessions are closed before the next one opens.
+        withContext(NonCancellable) { Sessions.stopAll() }
         val engine = model.prefs.engineUrl
         var session: Sessions.Session? = null
         try {
@@ -257,7 +290,7 @@ fun PlayerScreen(model: AppModel, list: List<Channel>, startIndex: Int, onExit: 
         if (System.currentTimeMillis() < infoUntil || phase != Phase.Playing) {
             InfoBar(channel, index + 1, now, tmdbKey, Modifier.align(Alignment.TopStart).padding(36.dp))
         }
-        if (panelOpen) SubtitlePanel(subtitles, tmdbKey)
+        if (panelOpen) SubtitlePanel(subtitles, tmdbKey, onAutoSync = { scope.launch { subtitles.autoSync(tap) } })
         LaunchedEffect(infoUntil) {
             delay((infoUntil - System.currentTimeMillis()).coerceAtLeast(0))
             infoUntil = 0

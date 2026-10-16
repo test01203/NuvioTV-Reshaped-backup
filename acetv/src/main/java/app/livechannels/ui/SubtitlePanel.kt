@@ -72,6 +72,14 @@ class SubtitleController(private val scope: CoroutineScope, private val prefs: P
         private set
     var programme: Programme? = null
         private set
+    /** Why the last file could not be used, shown in the panel. */
+    var error by mutableStateOf<String?>(null)
+        private set
+    /** What the automatic sync last did, shown in the panel. */
+    var syncNote by mutableStateOf<String?>(null)
+        private set
+    var lastAutoSyncMs = 0L
+        private set
     private var job: Job? = null
 
     /** A new programme or channel: what was found for the last one no longer applies. */
@@ -83,6 +91,9 @@ class SubtitleController(private val scope: CoroutineScope, private val prefs: P
         selected = null
         cues = emptyList()
         offsetMs = 0
+        error = null
+        syncNote = null
+        lastAutoSyncMs = 0
         status = if (programme == null) Status.NoGuide else Status.Idle
         // Once chosen, subtitles follow the viewer from programme to programme.
         if (programme != null && prefs.autoSubtitles) search(autoPick = true)
@@ -120,14 +131,17 @@ class SubtitleController(private val scope: CoroutineScope, private val prefs: P
     private suspend fun loadOption(option: SubtitleOption) {
         status = Status.Loading
         selected = option
+        error = null
         try {
             cues = Subtitles.load(option.url)
             status = if (cues.isEmpty()) Status.Failed else Status.Ready
+            if (cues.isEmpty()) error = Subtitles.lastError
         } catch (cancel: CancellationException) {
             throw cancel
-        } catch (_: Exception) {
+        } catch (failure: Exception) {
             cues = emptyList()
             status = Status.Failed
+            error = Subtitles.lastError ?: "${failure.javaClass.simpleName}: ${failure.message.orEmpty().take(120)}"
         }
     }
 
@@ -141,6 +155,25 @@ class SubtitleController(private val scope: CoroutineScope, private val prefs: P
 
     /** Where in the film the broadcast is now. */
     fun positionMs(nowMs: Long): Long = nowMs - (programme?.startMs ?: nowMs) + offsetMs
+
+    /** Lines the subtitles up with the speech the tap heard; applied only when the match is clear. */
+    suspend fun autoSync(tap: app.livechannels.SpeechTap) {
+        val start = programme?.startMs ?: return
+        if (cues.isEmpty()) return
+        val speech = tap.speech()
+        val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            app.livechannels.AutoSync.align(speech, cues, start, offsetMs)
+        }
+        lastAutoSyncMs = System.currentTimeMillis()
+        syncNote = when {
+            result == null -> "auto: not enough speech heard yet"
+            result.confidence >= 0.35f -> {
+                offsetMs = result.offsetMs
+                "auto: synced (%.0f%%)".format(result.confidence * 100)
+            }
+            else -> "auto: no clear match (%.0f%%)".format(result.confidence * 100)
+        }
+    }
 
     fun nudge(deltaMs: Long) {
         offsetMs += deltaMs
@@ -191,7 +224,7 @@ fun BoxScope.SubtitleLine(controller: SubtitleController) {
 
 /** The subtitles panel: matching, the choice of file, and the sync controls. */
 @Composable
-fun BoxScope.SubtitlePanel(controller: SubtitleController, tmdbKey: String) {
+fun BoxScope.SubtitlePanel(controller: SubtitleController, tmdbKey: String, onAutoSync: () -> Unit) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     Column(
@@ -221,6 +254,7 @@ fun BoxScope.SubtitlePanel(controller: SubtitleController, tmdbKey: String) {
             else -> null
         }
         statusText?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Palette.Amber) }
+        controller.error?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Palette.TextTertiary, maxLines = 2) }
 
         // Sync controls, once a file is shown.
         if (controller.cues.isNotEmpty()) {
@@ -230,6 +264,11 @@ fun BoxScope.SubtitlePanel(controller: SubtitleController, tmdbKey: String) {
                 PillButton("−0.5s", { controller.nudge(-500) })
                 PillButton("+0.5s", { controller.nudge(500) })
                 PillButton("+5s", { controller.nudge(5_000) })
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PillButton(stringResource(R.string.subs_auto_sync), onAutoSync)
+                controller.syncNote?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Palette.TextTertiary,
+                    modifier = Modifier.align(Alignment.CenterVertically)) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 PillButton(stringResource(R.string.subs_next_now), { controller.nextLineNow(System.currentTimeMillis()) })

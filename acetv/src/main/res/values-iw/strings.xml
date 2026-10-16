@@ -67,4 +67,5 @@
     <string name="subs_hint">◀ ▶  כתוביות</string>
     <string name="setting_tmdb">מפתח TMDB (לכתוביות ולשמות בעברית)</string>
     <string name="setting_tmdb_desc">מפתח חינמי מ-themoviedb.org (הגדרות ← API). נשמר רק במכשיר הזה ומשמש לזיהוי הסרטים מהמדריך.</string>
+    <string name="subs_auto_sync">סנכרון אוטומטי עכשיו</string>
 </resources>

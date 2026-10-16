@@ -4,8 +4,6 @@ import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.zip.GZIPInputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -146,23 +144,74 @@ object Subtitles {
         }.awaitAll().flatten().distinctBy { it.url }
     }
 
-    /** Downloads and reads a subtitle file (SRT or WebVTT, UTF-8 or Windows-1255, plain or gzip). */
+    /** Why the last download failed, shown in the panel. */
+    @Volatile
+    var lastError: String? = null
+        private set
+
+    private val client by lazy {
+        okhttp3.OkHttpClient.Builder()
+            .connectTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .callTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            // Addons redirect between http and https: follow both, as players do.
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
+
+    private fun fetch(url: String): ByteArray {
+        val request = okhttp3.Request.Builder().url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .header("Accept", "text/plain, text/vtt, application/x-subrip, application/zip, */*")
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
+            return response.body?.bytes() ?: throw IllegalStateException("empty answer")
+        }
+    }
+
+    /**
+     * Downloads and reads a subtitle file: SRT or WebVTT, UTF-8 or Windows-1255, plain, gzip or
+     * inside a ZIP (as Wizdom serves them).
+     */
     suspend fun load(url: String): List<Cue> = withContext(Dispatchers.IO) {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        connection.connectTimeout = 10_000
-        connection.readTimeout = 20_000
+        lastError = null
         val bytes = try {
-            if (connection.responseCode !in 200..299) throw IllegalStateException("HTTP ${connection.responseCode}")
-            connection.inputStream.use { it.readBytes() }
-        } finally {
-            connection.disconnect()
+            fetch(url)
+        } catch (error: javax.net.ssl.SSLException) {
+            // Older TVs lack some certificates: the same file over plain http, where the host offers it.
+            if (url.startsWith("https://")) fetch("http://" + url.removePrefix("https://")) else throw error
+        } catch (error: Exception) {
+            lastError = "${error.javaClass.simpleName}: ${error.message.orEmpty().take(120)}"
+            throw error
         }
-        val raw = if (bytes.size > 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
-            GZIPInputStream(bytes.inputStream()).use { it.readBytes() }
-        } else {
-            bytes
+        val raw = when {
+            bytes.size > 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte() ->
+                GZIPInputStream(bytes.inputStream()).use { it.readBytes() }
+            bytes.size > 4 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte() -> unzip(bytes)
+            else -> bytes
         }
-        parse(decode(raw))
+        val cues = parse(decode(raw))
+        if (cues.isEmpty()) lastError = "no subtitle lines in the file (${raw.size} bytes)"
+        cues
+    }
+
+    /** The subtitle file inside a ZIP: an .srt (or .vtt) one, the largest when there are several. */
+    private fun unzip(bytes: ByteArray): ByteArray {
+        var best: ByteArray? = null
+        java.util.zip.ZipInputStream(bytes.inputStream()).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                val name = entry.name.lowercase()
+                if (!entry.isDirectory && (name.endsWith(".srt") || name.endsWith(".vtt") || name.endsWith(".sub") || name.endsWith(".txt"))) {
+                    val data = zip.readBytes()
+                    if (best == null || data.size > best!!.size) best = data
+                }
+            }
+        }
+        return best ?: throw IllegalStateException("no subtitle file in the ZIP")
     }
 
     /** UTF-8 when the bytes are valid UTF-8; otherwise Windows-1255, which older Hebrew subtitles use. */
