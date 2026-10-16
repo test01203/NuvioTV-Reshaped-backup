@@ -56,7 +56,7 @@ jobs:
           ./gradlew :acetv:assembleRelease --stacktrace 2>&1 | tee build.log || {
             # Compiler and build errors as annotations, readable without the full log.
             # Kotlin errors first, then Gradle's "What went wrong" with the lines under it.
-            { grep -E "^e: " build.log | sed -E 's#^e: file://[^ ]*/(acetv/src/main/java|shared/src)/##''
+            { grep -E "^e: " build.log | sed -E 's#^e: file://[^ ]*/(acetv/src/main/java|shared/src)/##'
               awk '/What went wrong/{n=4} n>0{print; n--}' build.log | grep -v "What went wrong"
               grep -iE "AAPT: error|error: resource|Execution failed" build.log; } \
               | grep -v "^> Task" | head -9 | while IFS= read -r line; do
