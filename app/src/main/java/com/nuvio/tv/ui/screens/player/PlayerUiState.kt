@@ -44,6 +44,8 @@ data class PlayerUiState(
     val subtitleTracks: List<TrackInfo> = emptyList(),
     val selectedAudioTrackIndex: Int = -1,
     val selectedSubtitleTrackIndex: Int = -1,
+    val activeVideoQuality: String? = null,
+    val activeHdrFormat: String? = null,
     val audioAmplificationDb: Int = 0,
     val isAudioAmplificationAvailable: Boolean = true,
     val persistAudioAmplification: Boolean = false,
@@ -159,7 +161,20 @@ data class PlayerUiState(
     // When true, suppress all torrent stats text (buffer, seeds, peers, speed)
     // from loading overlay, rebuffering indicator, and corner overlay.
     val hideTorrentStats: Boolean = true
-)
+) {
+    val activeAudioTrack: TrackInfo?
+        get() = audioTracks.getOrNull(selectedAudioTrackIndex)
+            ?: audioTracks.firstOrNull { it.isSelected }
+
+    val activeAudioFormat: String?
+        get() = activeAudioTrack?.formatBadge
+
+    val activeAudioIsDolby: Boolean
+        get() = activeAudioTrack?.isDolbyFormat == true
+
+    val activeAudioLanguageLabel: String?
+        get() = activeAudioTrack?.languageBadge
+}
 
 data class PlaybackTimelineState(
     val currentPosition: Long = 0L,
@@ -175,7 +190,10 @@ data class TrackInfo(
     val channelCount: Int? = null,
     val isForced: Boolean = false,
     val isSelected: Boolean = false,
-    val sampleRate: Int? = null
+    val sampleRate: Int? = null,
+    val formatBadge: String? = null,
+    val isDolbyFormat: Boolean = false,
+    val languageBadge: String? = null
 )
 
 data class NextEpisodeInfo(

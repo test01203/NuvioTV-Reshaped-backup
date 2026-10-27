@@ -589,6 +589,11 @@ fun PlayerScreen(
             type = uiState.contentType,
             description = uiState.description,
             cast = uiState.castMembers,
+            videoQuality = uiState.activeVideoQuality,
+            hdrFormat = uiState.activeHdrFormat,
+            audioFormat = uiState.activeAudioFormat,
+            isDolbyAudio = uiState.activeAudioIsDolby,
+            audioLanguageLabel = uiState.activeAudioLanguageLabel,
             modifier = Modifier
                 .fillMaxSize()
                 .zIndex(2.5f)
@@ -1427,6 +1432,15 @@ private fun PlayerControlsOverlay(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+
+                    ActivePlaybackBadgesRow(
+                        videoQuality = uiState.activeVideoQuality,
+                        hdrFormat = uiState.activeHdrFormat,
+                        audioFormat = uiState.activeAudioFormat,
+                        isDolbyAudio = uiState.activeAudioIsDolby,
+                        audioLanguageLabel = uiState.activeAudioLanguageLabel,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 4.dp)
+                    )
 
                     val hasYear = !uiState.releaseYear.isNullOrBlank()
                     val showVia = !uiState.isPlaying && !uiState.currentStreamName.isNullOrBlank()

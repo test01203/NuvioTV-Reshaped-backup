@@ -420,6 +420,21 @@ internal fun PlayerRuntimeController.initializePlayer(
                         updateAvailableTracks(tracks)
                     }
 
+                    override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                        if (videoSize.width > 0 && videoSize.height > 0) {
+                            currentVideoWidth = videoSize.width
+                            currentVideoHeight = videoSize.height
+                            val qualityBadge = ActivePlaybackBadgeUtils.formatVideoQuality(
+                                videoSize.width,
+                                videoSize.height
+                            )
+                            _uiState.update { state ->
+                                if (state.activeVideoQuality == qualityBadge) state
+                                else state.copy(activeVideoQuality = qualityBadge)
+                            }
+                        }
+                    }
+
                     override fun onRenderedFirstFrame() {
                         hasRenderedFirstFrame = true
                         resetErrorRetryState()
@@ -727,11 +742,17 @@ internal fun PlayerRuntimeController.resetLoadingOverlayForNewStream() {
     shouldEnforceAutoplayOnFirstReady = true
     userPausedManually = false
     lastKnownDuration = 0L
+    currentVideoWidth = null
+    currentVideoHeight = null
+    currentVideoCodec = null
+    currentVideoBitrate = null
     _uiState.update { state ->
         state.copy(
             showLoadingOverlay = state.loadingOverlayEnabled,
             showControls = false,
-            loadingProgress = null
+            loadingProgress = null,
+            activeVideoQuality = null,
+            activeHdrFormat = null
         )
     }
 }

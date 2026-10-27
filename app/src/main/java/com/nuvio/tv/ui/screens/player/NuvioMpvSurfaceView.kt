@@ -374,6 +374,26 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
 
         val audioTracks = mutableListOf<MpvTrack>()
         val subtitleTracks = mutableListOf<MpvTrack>()
+        var videoWidth: Int? = runCatching {
+            mpv.getPropertyInt("video-params/w")
+                ?: mpv.getPropertyInt("width")
+                ?: mpv.getPropertyInt("dwidth")
+        }.getOrNull()?.takeIf { it > 0 }
+        var videoHeight: Int? = runCatching {
+            mpv.getPropertyInt("video-params/h")
+                ?: mpv.getPropertyInt("height")
+                ?: mpv.getPropertyInt("dheight")
+        }.getOrNull()?.takeIf { it > 0 }
+        var videoCodec: String? = null
+        var videoTitle: String? = null
+        val videoColormatrix: String? = runCatching {
+            mpv.getPropertyString("video-params/colormatrix")?.trim()?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+        val videoGamma: String? = runCatching {
+            (mpv.getPropertyString("video-params/gamma")
+                ?: mpv.getPropertyString("video-params/transfer"))
+                ?.trim()?.takeIf { it.isNotBlank() }
+        }.getOrNull()
 
         for (i in 0 until trackCount) {
             val type = mpv.getPropertyString("track-list/$i/type")?.lowercase() ?: continue
@@ -385,6 +405,9 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
             val codec = mpv.getPropertyString("track-list/$i/codec")
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+            val decoderDesc = mpv.getPropertyString("track-list/$i/decoder-desc")
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
             val selectedByFlag = mpv.getPropertyBoolean("track-list/$i/selected") == true
@@ -402,6 +425,19 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
             }
 
             when (type) {
+                "video" -> {
+                    if (selected) {
+                        if (videoWidth == null) {
+                            videoWidth = mpv.getPropertyInt("track-list/$i/demux-w")?.takeIf { it > 0 }
+                        }
+                        if (videoHeight == null) {
+                            videoHeight = mpv.getPropertyInt("track-list/$i/demux-h")?.takeIf { it > 0 }
+                        }
+                        videoCodec = codec
+                        videoTitle = title
+                    }
+                }
+
                 "audio" -> {
                     audioTracks += MpvTrack(
                         id = id,
@@ -409,6 +445,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
                         name = title ?: language ?: "Audio $id",
                         language = language,
                         codec = codec,
+                        decoderDesc = decoderDesc,
                         channelCount = channelCount,
                         isSelected = selected,
                         isForced = false,
@@ -423,6 +460,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
                         name = title ?: language ?: "Subtitle $id",
                         language = language,
                         codec = codec,
+                        decoderDesc = decoderDesc,
                         channelCount = null,
                         isSelected = selected,
                         isForced = forced,
@@ -434,7 +472,13 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
 
         return MpvTrackSnapshot(
             audioTracks = audioTracks,
-            subtitleTracks = subtitleTracks
+            subtitleTracks = subtitleTracks,
+            videoWidth = videoWidth,
+            videoHeight = videoHeight,
+            videoCodec = videoCodec,
+            videoTitle = videoTitle,
+            videoColormatrix = videoColormatrix,
+            videoGamma = videoGamma
         )
     }
 
@@ -572,7 +616,13 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
 
 data class MpvTrackSnapshot(
     val audioTracks: List<MpvTrack>,
-    val subtitleTracks: List<MpvTrack>
+    val subtitleTracks: List<MpvTrack>,
+    val videoWidth: Int? = null,
+    val videoHeight: Int? = null,
+    val videoCodec: String? = null,
+    val videoTitle: String? = null,
+    val videoColormatrix: String? = null,
+    val videoGamma: String? = null
 )
 
 data class MpvTrack(
@@ -581,6 +631,7 @@ data class MpvTrack(
     val name: String,
     val language: String?,
     val codec: String?,
+    val decoderDesc: String? = null,
     val channelCount: Int?,
     val isSelected: Boolean,
     val isForced: Boolean,

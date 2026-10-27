@@ -186,6 +186,33 @@ internal fun PlayerRuntimeController.updateMpvAvailableTracks() {
             "selectedSubtitleId=${snapshot.subtitleTracks.firstOrNull { it.isSelected }?.id}"
     )
 
+    if (snapshot.videoWidth != null && snapshot.videoWidth > 0) {
+        currentVideoWidth = snapshot.videoWidth
+    }
+    if (snapshot.videoHeight != null && snapshot.videoHeight > 0) {
+        currentVideoHeight = snapshot.videoHeight
+    }
+    if (!snapshot.videoCodec.isNullOrBlank()) {
+        currentVideoCodec = snapshot.videoCodec
+    }
+    val detectedVideoQuality = ActivePlaybackBadgeUtils.formatVideoQuality(
+        currentVideoWidth,
+        currentVideoHeight
+    )
+    val detectedHdrFormat = ActivePlaybackBadgeUtils.detectHdrFormat(
+        mimeType = null,
+        codecs = snapshot.videoCodec,
+        colorTransfer = null,
+        label = snapshot.videoTitle,
+        colormatrix = snapshot.videoColormatrix,
+        gamma = snapshot.videoGamma,
+        streamHints = listOf(
+            _uiState.value.currentStreamName,
+            currentStreamDescription,
+            currentFilename
+        )
+    )
+
     val audioTracks = snapshot.audioTracks
         .mapIndexed { index, track ->
             val codecSuffix = buildList {
@@ -197,6 +224,18 @@ internal fun PlayerRuntimeController.updateMpvAvailableTracks() {
             } else {
                 "${track.name} ($codecSuffix)"
             }
+            val audioFormatBadge = ActivePlaybackBadgeUtils.detectAudioFormat(
+                mimeType = null,
+                codecs = track.codec,
+                label = track.name,
+                channelCount = track.channelCount?.takeIf { it > 0 },
+                decoderDesc = track.decoderDesc
+            )
+            val languageBadge = ActivePlaybackBadgeUtils.formatAudioLanguageAndChannels(
+                languageCode = track.language,
+                label = track.name,
+                channelCount = track.channelCount?.takeIf { it > 0 }
+            )
             TrackInfo(
                 index = index,
                 name = displayName,
@@ -204,7 +243,10 @@ internal fun PlayerRuntimeController.updateMpvAvailableTracks() {
                 trackId = track.id.toString(),
                 codec = track.codec,
                 channelCount = track.channelCount,
-                isSelected = track.isSelected
+                isSelected = track.isSelected,
+                formatBadge = audioFormatBadge?.label,
+                isDolbyFormat = audioFormatBadge?.isDolby == true,
+                languageBadge = languageBadge
             )
         }
 
@@ -260,7 +302,9 @@ internal fun PlayerRuntimeController.updateMpvAvailableTracks() {
             state.subtitleTracks == internalSubtitleTracks &&
             state.selectedAudioTrackIndex == selectedAudioIndex &&
             state.selectedSubtitleTrackIndex == normalizedSelectedSubtitleIndex &&
-            state.selectedAddonSubtitle == addonSelection
+            state.selectedAddonSubtitle == addonSelection &&
+            state.activeVideoQuality == (detectedVideoQuality ?: state.activeVideoQuality) &&
+            state.activeHdrFormat == detectedHdrFormat
         ) {
             state
         } else {
@@ -269,7 +313,9 @@ internal fun PlayerRuntimeController.updateMpvAvailableTracks() {
                 subtitleTracks = internalSubtitleTracks,
                 selectedAudioTrackIndex = selectedAudioIndex,
                 selectedSubtitleTrackIndex = normalizedSelectedSubtitleIndex,
-                selectedAddonSubtitle = addonSelection
+                selectedAddonSubtitle = addonSelection,
+                activeVideoQuality = detectedVideoQuality ?: state.activeVideoQuality,
+                activeHdrFormat = detectedHdrFormat
             )
         }
     }

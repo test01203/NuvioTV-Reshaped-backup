@@ -84,12 +84,23 @@ internal fun PlayerRuntimeController.selectAudioTrack(trackIndex: Int) {
         message = "trackIndex=$trackIndex usingMpv=${isUsingMpvEngine()} " +
             "track=${_uiState.value.audioTracks.getOrNull(trackIndex)?.let { "${it.language}/${it.name}/${it.trackId}" } ?: "none"}"
     )
+    if (trackIndex in _uiState.value.audioTracks.indices) {
+        _uiState.update { state ->
+            state.copy(
+                selectedAudioTrackIndex = trackIndex,
+                audioTracks = state.audioTracks.mapIndexed { idx, info ->
+                    info.copy(isSelected = idx == trackIndex)
+                }
+            )
+        }
+    }
     if (isUsingMpvEngine()) {
         val wasPlaying = isPlaybackCurrentlyPlaying()
         val track = _uiState.value.audioTracks.getOrNull(trackIndex)
         val trackId = track?.trackId?.toIntOrNull()
         val changed = trackId != null && mpvView?.selectAudioTrackById(trackId) == true
         if (changed) {
+            updateMpvAvailableTracks()
             keepMpvPlayingIfNeeded(wasPlaying)
         }
         return

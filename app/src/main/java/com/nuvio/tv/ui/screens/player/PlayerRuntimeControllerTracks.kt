@@ -29,6 +29,7 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
     val subtitleTracks = mutableListOf<TrackInfo>()
     var selectedAudioIndex = -1
     var selectedSubtitleIndex = -1
+    var detectedHdrFormat: String? = null
 
     tracks.groups.forEachIndexed { groupIndex, trackGroup ->
         val trackType = trackGroup.type
@@ -54,12 +55,23 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                                 )
                             }
                         }
-                        // Extract video codec, resolution, and bitrate for stream info
+                        // Extract video codec, resolution, HDR format, and bitrate for stream info & badges
                         currentVideoCodec = CustomDefaultTrackNameProvider.formatNameFromMime(format.sampleMimeType)
                             ?: CustomDefaultTrackNameProvider.formatNameFromMime(format.codecs)
-                        currentVideoWidth = format.width.takeIf { it > 0 }
-                        currentVideoHeight = format.height.takeIf { it > 0 }
+                        currentVideoWidth = format.width.takeIf { it > 0 } ?: currentVideoWidth
+                        currentVideoHeight = format.height.takeIf { it > 0 } ?: currentVideoHeight
                         currentVideoBitrate = format.bitrate.takeIf { it > 0 }
+                        detectedHdrFormat = ActivePlaybackBadgeUtils.detectHdrFormat(
+                            mimeType = format.sampleMimeType,
+                            codecs = format.codecs,
+                            colorTransfer = format.colorInfo?.colorTransfer,
+                            label = format.label,
+                            streamHints = listOf(
+                                _uiState.value.currentStreamName,
+                                currentStreamDescription,
+                                currentFilename
+                            )
+                        )
                         break
                     }
                 }
@@ -81,6 +93,17 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                     val baseName = format.label ?: langDisplay ?: "Audio ${audioTracks.size + 1}"
                     val suffix = listOfNotNull(codecName, channelLayout).joinToString(" ")
                     val displayName = if (suffix.isNotEmpty()) "$baseName ($suffix)" else baseName
+                    val audioFormatBadge = ActivePlaybackBadgeUtils.detectAudioFormat(
+                        mimeType = format.sampleMimeType,
+                        codecs = format.codecs,
+                        label = format.label,
+                        channelCount = format.channelCount.takeIf { it > 0 }
+                    )
+                    val languageBadge = ActivePlaybackBadgeUtils.formatAudioLanguageAndChannels(
+                        languageCode = format.language,
+                        label = format.label,
+                        channelCount = format.channelCount.takeIf { it > 0 }
+                    )
 
                     audioTracks.add(
                         TrackInfo(
@@ -91,7 +114,10 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
                             codec = codecName,
                             channelCount = format.channelCount.takeIf { it > 0 },
                             isSelected = isSelected,
-                            sampleRate = format.sampleRate.takeIf { it > 0 }
+                            sampleRate = format.sampleRate.takeIf { it > 0 },
+                            formatBadge = audioFormatBadge?.label,
+                            isDolbyFormat = audioFormatBadge?.isDolby == true,
+                            languageBadge = languageBadge
                         )
                     )
                 }
@@ -176,7 +202,10 @@ internal fun PlayerRuntimeController.updateAvailableTracks(tracks: Tracks) {
             audioTracks = audioTracks,
             subtitleTracks = subtitleTracks,
             selectedAudioTrackIndex = selectedAudioIndex,
-            selectedSubtitleTrackIndex = selectedSubtitleIndex
+            selectedSubtitleTrackIndex = selectedSubtitleIndex,
+            activeVideoQuality = ActivePlaybackBadgeUtils.formatVideoQuality(currentVideoWidth, currentVideoHeight)
+                ?: it.activeVideoQuality,
+            activeHdrFormat = detectedHdrFormat
         )
     }
     logSwitchTrace(

@@ -62,6 +62,11 @@ fun PauseOverlay(
     type: String?,
     description: String?,
     cast: List<MetaCastMember>,
+    videoQuality: String? = null,
+    hdrFormat: String? = null,
+    audioFormat: String? = null,
+    isDolbyAudio: Boolean = false,
+    audioLanguageLabel: String? = null,
     modifier: Modifier = Modifier
 ) {
     var selectedCastMember by remember { mutableStateOf<MetaCastMember?>(null) }
@@ -102,6 +107,11 @@ fun PauseOverlay(
                     type = type,
                     description = description,
                     cast = cast,
+                    videoQuality = videoQuality,
+                    hdrFormat = hdrFormat,
+                    audioFormat = audioFormat,
+                    isDolbyAudio = isDolbyAudio,
+                    audioLanguageLabel = audioLanguageLabel,
                     onCastSelected = { selectedCastMember = it }
                 )
             }
@@ -144,6 +154,11 @@ private fun PauseMetadataView(
     type: String?,
     description: String?,
     cast: List<MetaCastMember>,
+    videoQuality: String? = null,
+    hdrFormat: String? = null,
+    audioFormat: String? = null,
+    isDolbyAudio: Boolean = false,
+    audioLanguageLabel: String? = null,
     onCastSelected: (MetaCastMember) -> Unit
 ) {
     Column(
@@ -192,6 +207,15 @@ private fun PauseMetadataView(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+
+            ActivePlaybackBadgesRow(
+                videoQuality = videoQuality,
+                hdrFormat = hdrFormat,
+                audioFormat = audioFormat,
+                isDolbyAudio = isDolbyAudio,
+                audioLanguageLabel = audioLanguageLabel,
+                modifier = Modifier.padding(top = 10.dp)
+            )
 
             if (!year.isNullOrBlank()) {
                 val episodeLabel = if (type in listOf("series", "tv") && season != null && episode != null) {
